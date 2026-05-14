@@ -883,15 +883,26 @@ function renderPaginationControls(total, containerId, loadFn) {
   const start = (currentPage - 1) * PAGE_SIZE + 1;
   const end = Math.min(currentPage * PAGE_SIZE, total);
 
+  // Build sliding window: always show first, last, current ±2, with ellipsis
+  const pages = new Set([1, totalPages, currentPage, currentPage - 1, currentPage + 1, currentPage - 2, currentPage + 2]);
+  const validPages = [...pages].filter(p => p >= 1 && p <= totalPages).sort((a, b) => a - b);
+
+  let pageButtons = '';
+  let prev = null;
+  for (const p of validPages) {
+    if (prev && p - prev > 1) pageButtons += `<span style="padding:0 4px;color:var(--text-muted)">…</span>`;
+    pageButtons += `<button class="page-btn ${p === currentPage ? 'active' : ''}" onclick="goToPage(${p}, '${containerId}')">${p}</button>`;
+    prev = p;
+  }
+
   container.innerHTML = `
     <div class="pagination-info">Showing ${total ? start : 0}–${end} of ${total} leads</div>
-    <div class="pagination-controls">
+    <div class="pagination-controls" style="display:flex;align-items:center;gap:4px">
+      <button class="page-btn" onclick="goToPage(1, '${containerId}')" ${currentPage <= 1 ? 'disabled' : ''} title="First">«</button>
       <button class="page-btn" onclick="changePage(-1, '${containerId}')" ${currentPage <= 1 ? 'disabled' : ''}>‹</button>
-      ${Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-        const p = i + 1;
-        return `<button class="page-btn ${p === currentPage ? 'active' : ''}" onclick="goToPage(${p}, '${containerId}')">${p}</button>`;
-      }).join('')}
+      ${pageButtons}
       <button class="page-btn" onclick="changePage(1, '${containerId}')" ${currentPage >= totalPages ? 'disabled' : ''}>›</button>
+      <button class="page-btn" onclick="goToPage(${totalPages}, '${containerId}')" ${currentPage >= totalPages ? 'disabled' : ''} title="Last">»</button>
     </div>`;
 }
 
