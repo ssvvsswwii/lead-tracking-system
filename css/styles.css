@@ -486,5 +486,6 @@ ul { list-style: none; }
   content: ''; position: absolute; width: 16px; height: 16px; border-radius: 50%;
   background: white; left: 3px; top: 3px; transition: .2s; box-shadow: 0 1px 3px rgba(0,0,0,.2);
 }
-.toggle input:checked + .toggle-slider { background: var(--primary); }
+.toggle-slider { background: var(--danger); }
+.toggle input:checked + .toggle-slider { background: var(--success); }
 .toggle input:checked + .toggle-slider::before { transform: translateX(18px); }
