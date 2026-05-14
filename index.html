@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign In — LeadFlow CRM</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+  <style>
+    .form-msg {
+      padding: 10px 14px; border-radius: 6px; font-size: 13.5px;
+      margin-bottom: 16px; display: none;
+    }
+    .form-msg.error { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+    .form-msg.success { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+    #signup-form { display: none; }
+    .divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+    .required::after { content: ' *'; color: var(--danger); }
+  </style>
+</head>
+<body>
+
+<div class="auth-page">
+  <!-- Hero / Left Panel -->
+  <div class="auth-hero">
+    <div class="auth-hero-logo">
+      <div class="logo-icon">📊</div>
+      <h1>LeadFlow CRM</h1>
+      <p>Secure lead tracking and management for your entire team</p>
+    </div>
+
+    <div class="auth-features">
+      <div class="auth-feature-item">
+        <span class="fi-icon">🔒</span>
+        <span>Role-based access control — Admin, Branch Manager, Consultant</span>
+      </div>
+      <div class="auth-feature-item">
+        <span class="fi-icon">📈</span>
+        <span>Real-time pipeline tracking with status and conversion analytics</span>
+      </div>
+      <div class="auth-feature-item">
+        <span class="fi-icon">🏢</span>
+        <span>Multi-branch support with branch-scoped visibility</span>
+      </div>
+      <div class="auth-feature-item">
+        <span class="fi-icon">📥</span>
+        <span>Import existing leads from Excel or CSV files</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Auth Panel / Right -->
+  <div class="auth-panel">
+    <div class="auth-card">
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-tab="signin">Sign In</button>
+        <button class="auth-tab" data-tab="signup">Request Access</button>
+      </div>
+
+      <!-- SIGN IN -->
+      <form id="signin-form" autocomplete="on">
+        <h2 class="auth-card-title">Welcome back</h2>
+        <p class="auth-card-sub">Sign in to your LeadFlow account</p>
+
+        <div id="signin-error" class="form-msg error"></div>
+
+        <div class="form-group">
+          <label class="form-label required" for="si-email">Email address</label>
+          <input class="form-control" type="email" id="si-email" name="email"
+                 placeholder="you@company.com" autocomplete="email" required />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label required" for="si-password">Password</label>
+          <div class="form-control-wrap">
+            <input class="form-control" type="password" id="si-password" name="password"
+                   placeholder="Enter your password" autocomplete="current-password" required />
+            <button type="button" class="toggle-pw" aria-label="Show password">👁️</button>
+          </div>
+        </div>
+
+        <button type="submit" id="signin-btn" class="btn btn-primary btn-block btn-lg" data-text="Sign In" style="margin-top:8px">
+          <span class="btn-text">Sign In</span>
+          <span class="btn-spinner" style="display:none">⏳</span>
+        </button>
+
+        <p class="auth-footer" style="margin-top:20px">
+          Don't have access? <a href="#" onclick="document.querySelector('[data-tab=signup]').click();return false">Request an account</a>
+        </p>
+      </form>
+
+      <!-- SIGN UP / REQUEST ACCESS -->
+      <form id="signup-form" autocomplete="off">
+        <h2 class="auth-card-title">Request access</h2>
+        <p class="auth-card-sub">An administrator will activate your account.</p>
+
+        <div id="signup-error" class="form-msg error"></div>
+        <div id="signup-success" class="form-msg success"></div>
+
+        <div class="form-group">
+          <label class="form-label required" for="su-name">Full name</label>
+          <input class="form-control" type="text" id="su-name" name="full_name"
+                 placeholder="Jane Smith" required />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label required" for="su-email">Work email</label>
+          <input class="form-control" type="email" id="su-email" name="email"
+                 placeholder="jane@company.com" required />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label required" for="su-role">Requested role</label>
+          <select class="form-control" id="su-role" name="role" required>
+            <option value="">— Select your role —</option>
+            <option value="branch_manager">Branch Manager</option>
+            <option value="client_consultant">Client Consultant</option>
+          </select>
+          <small style="font-size:12px;color:var(--text-muted);margin-top:4px;display:block">Admin accounts must be created by an existing Admin.</small>
+        </div>
+
+        <hr class="divider" />
+
+        <div class="form-group">
+          <label class="form-label required" for="su-pw">Password</label>
+          <div class="form-control-wrap">
+            <input class="form-control" type="password" id="su-pw" name="password"
+                   placeholder="Minimum 8 characters" required />
+            <button type="button" class="toggle-pw" aria-label="Show password">👁️</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label required" for="su-pw2">Confirm password</label>
+          <div class="form-control-wrap">
+            <input class="form-control" type="password" id="su-pw2" name="confirm_password"
+                   placeholder="Repeat your password" required />
+            <button type="button" class="toggle-pw" aria-label="Show password">👁️</button>
+          </div>
+        </div>
+
+        <button type="submit" id="signup-btn" class="btn btn-primary btn-block" data-text="Submit Request">
+          <span class="btn-text">Submit Request</span>
+          <span class="btn-spinner" style="display:none">⏳</span>
+        </button>
+
+        <p class="auth-footer" style="margin-top:20px">
+          Already have access? <a href="#" onclick="document.querySelector('[data-tab=signin]').click();return false">Sign in</a>
+        </p>
+      </form>
+
+    </div>
+
+    <p style="margin-top:32px;font-size:12px;color:var(--text-muted);text-align:center">
+      Protected by Supabase Auth &nbsp;·&nbsp; All client data is encrypted at rest
+    </p>
+  </div>
+</div>
+
+<!-- Supabase JS -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+</body>
+</html>

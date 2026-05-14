@@ -1,0 +1,929 @@
+// =============================================
+//  APP MODULE — Dashboard, Leads, Users
+// =============================================
+
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let currentUser = null;
+let currentProfile = null;
+let allLeads = [];
+let allUsers = [];
+let allBranches = [];
+let currentPage = 1;
+const PAGE_SIZE = 15;
+
+// =============================================
+//  INIT
+// =============================================
+(async () => {
+  const { data: { session } } = await db.auth.getSession();
+  if (!session) { window.location.href = 'index.html'; return; }
+  currentUser = session.user;
+
+  const { data: profile } = await db
+    .from('profiles')
+    .select('*, branches(name)')
+    .eq('id', currentUser.id)
+    .single();
+
+  if (!profile || !profile.is_active) {
+    await db.auth.signOut();
+    window.location.href = 'index.html';
+    return;
+  }
+
+  currentProfile = profile;
+  renderUserInfo();
+  await loadBranches();
+  await loadDashboard();
+  hideLoading();
+
+  // Restrict nav items by role
+  applyRoleNav();
+
+  // Listen for auth changes (logout from another tab)
+  db.auth.onAuthStateChange((event) => {
+    if (event === 'SIGNED_OUT') window.location.href = 'index.html';
+  });
+})();
+
+// =============================================
+//  NAVIGATION
+// =============================================
+function navigateTo(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+
+  const pageEl = document.getElementById(`page-${page}`);
+  const navEl = document.querySelector(`.nav-item[data-page="${page}"]`);
+
+  if (pageEl) pageEl.classList.add('active');
+  if (navEl) navEl.classList.add('active');
+
+  document.querySelector('.topbar-title').textContent = {
+    dashboard: 'Dashboard',
+    leads: 'Lead Management',
+    users: 'User Management',
+    reports: 'Reports & Analytics',
+    import: 'Import Leads',
+  }[page] || page;
+
+  if (page === 'leads') loadLeads();
+  if (page === 'users') loadUsers();
+  if (page === 'reports') loadReports();
+  if (page === 'import') initImport();
+
+  // Close sidebar on mobile
+  document.querySelector('.sidebar').classList.remove('open');
+}
+
+document.querySelectorAll('.nav-item[data-page]').forEach(item => {
+  item.addEventListener('click', () => navigateTo(item.dataset.page));
+});
+
+document.querySelector('.topbar-menu-btn')?.addEventListener('click', () => {
+  document.querySelector('.sidebar').classList.toggle('open');
+});
+
+function applyRoleNav() {
+  const role = currentProfile.role;
+  // Hide admin-only items for non-admins
+  if (role !== 'admin') {
+    document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
+  }
+  // Hide user management for consultants
+  if (role === 'client_consultant') {
+    document.querySelectorAll('.manager-only').forEach(el => el.style.display = 'none');
+  }
+}
+
+// =============================================
+//  USER INFO
+// =============================================
+function renderUserInfo() {
+  const initials = currentProfile.full_name?.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || '??';
+  document.getElementById('user-initials').textContent = initials;
+  document.getElementById('user-name').textContent = currentProfile.full_name || currentUser.email;
+  const roleEl = document.getElementById('user-role');
+  if (roleEl) {
+    roleEl.textContent = ROLES[currentProfile.role]?.label || currentProfile.role;
+    roleEl.className = `user-role-badge ${ROLES[currentProfile.role]?.color || ''}`;
+  }
+}
+
+// =============================================
+//  LOGOUT
+// =============================================
+document.getElementById('logout-btn')?.addEventListener('click', async () => {
+  await db.auth.signOut();
+  window.location.href = 'index.html';
+});
+
+// =============================================
+//  BRANCHES
+// =============================================
+async function loadBranches() {
+  const { data } = await db.from('branches').select('*').order('name');
+  allBranches = data || [];
+}
+
+// =============================================
+//  DASHBOARD
+// =============================================
+async function loadDashboard() {
+  let query = db.from('leads').select('status, created_at, branch_id, assigned_to');
+
+  if (currentProfile.role === 'branch_manager') {
+    query = query.eq('branch_id', currentProfile.branch_id);
+  } else if (currentProfile.role === 'client_consultant') {
+    query = query.eq('assigned_to', currentUser.id);
+  }
+
+  const { data: leads } = await query;
+  if (!leads) return;
+
+  const total = leads.length;
+  const won = leads.filter(l => l.status === 'won').length;
+  const active = leads.filter(l => !['won','lost'].includes(l.status)).length;
+  const thisMonth = leads.filter(l => {
+    const d = new Date(l.created_at);
+    const now = new Date();
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  }).length;
+
+  setText('stat-total', total);
+  setText('stat-won', won);
+  setText('stat-active', active);
+  setText('stat-month', thisMonth);
+
+  renderPipeline(leads);
+  await loadRecentLeads(leads.slice(-5).reverse());
+}
+
+function renderPipeline(leads) {
+  const total = leads.length || 1;
+  const bar = document.getElementById('pipeline-bar');
+  const legendEl = document.getElementById('pipeline-legend');
+  if (!bar) return;
+
+  bar.innerHTML = '';
+  legendEl.innerHTML = '';
+
+  LEAD_STATUSES.forEach(s => {
+    const count = leads.filter(l => l.status === s.value).length;
+    const pct = (count / total) * 100;
+    if (pct > 0) {
+      const seg = document.createElement('div');
+      seg.className = 'pipeline-seg';
+      seg.style.cssText = `width:${pct}%;background:${s.color};`;
+      seg.title = `${s.label}: ${count}`;
+      bar.appendChild(seg);
+    }
+
+    const leg = document.createElement('div');
+    leg.className = 'legend-item';
+    leg.innerHTML = `<span class="legend-dot" style="background:${s.color}"></span><span>${s.label} (${count})</span>`;
+    legendEl.appendChild(leg);
+  });
+}
+
+async function loadRecentLeads(localLeads) {
+  let leads = localLeads;
+  if (!leads || leads.length === 0) {
+    let q = db.from('leads').select('id,first_name,last_name,email,status,created_at').order('created_at', { ascending: false }).limit(5);
+    if (currentProfile.role === 'branch_manager') q = q.eq('branch_id', currentProfile.branch_id);
+    if (currentProfile.role === 'client_consultant') q = q.eq('assigned_to', currentUser.id);
+    const { data } = await q;
+    leads = data || [];
+  }
+
+  const tbody = document.getElementById('recent-leads-body');
+  if (!tbody) return;
+  tbody.innerHTML = leads.map(l => `
+    <tr>
+      <td><strong>${l.first_name} ${l.last_name}</strong></td>
+      <td>${l.email}</td>
+      <td><span class="badge badge-${l.status}">${statusLabel(l.status)}</span></td>
+      <td>${formatDate(l.created_at)}</td>
+      <td><button class="btn btn-outline btn-sm" onclick="openLeadDetail('${l.id}')">View</button></td>
+    </tr>
+  `).join('') || '<tr><td colspan="5" class="empty-state" style="padding:24px;text-align:center;color:var(--text-muted)">No recent leads</td></tr>';
+}
+
+// =============================================
+//  LEADS
+// =============================================
+async function loadLeads(resetPage = true) {
+  if (resetPage) currentPage = 1;
+  showTableLoading('leads-tbody', 7);
+
+  const search = document.getElementById('lead-search')?.value.trim() || '';
+  const statusFilter = document.getElementById('lead-status-filter')?.value || '';
+  const branchFilter = document.getElementById('lead-branch-filter')?.value || '';
+  const consultantFilter = document.getElementById('lead-consultant-filter')?.value || '';
+
+  let query = db.from('leads')
+    .select(`
+      id, first_name, last_name, email, phone, status, source,
+      created_at, updated_at, notes, value,
+      branches(name),
+      assigned_profile:profiles!leads_assigned_to_fkey(full_name)
+    `, { count: 'exact' })
+    .order('created_at', { ascending: false });
+
+  // Role-based scoping (enforced by RLS too — this just improves UX)
+  if (currentProfile.role === 'branch_manager') {
+    query = query.eq('branch_id', currentProfile.branch_id);
+  } else if (currentProfile.role === 'client_consultant') {
+    query = query.eq('assigned_to', currentUser.id);
+  }
+
+  if (search) {
+    query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`);
+  }
+  if (statusFilter) query = query.eq('status', statusFilter);
+  if (branchFilter && currentProfile.role === 'admin') query = query.eq('branch_id', branchFilter);
+  if (consultantFilter && currentProfile.role !== 'client_consultant') query = query.eq('assigned_to', consultantFilter);
+
+  const from = (currentPage - 1) * PAGE_SIZE;
+  const to = from + PAGE_SIZE - 1;
+  query = query.range(from, to);
+
+  const { data, count, error } = await query;
+
+  if (error) { showToast('Failed to load leads', 'error'); return; }
+
+  allLeads = data || [];
+  renderLeadsTable(allLeads);
+  renderPaginationControls(count || 0, 'leads-pagination', loadLeads);
+}
+
+function renderLeadsTable(leads) {
+  const tbody = document.getElementById('leads-tbody');
+  if (!tbody) return;
+
+  if (!leads.length) {
+    tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">📋</div><h4>No leads found</h4><p>Try adjusting your filters or add a new lead.</p></div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = leads.map(l => `
+    <tr>
+      <td>
+        <div style="font-weight:600">${escHtml(l.first_name)} ${escHtml(l.last_name)}</div>
+        <div style="font-size:12px;color:var(--text-muted)">${escHtml(l.email)}</div>
+      </td>
+      <td>${escHtml(l.phone || '—')}</td>
+      <td><span class="badge badge-${l.status}">${statusLabel(l.status)}</span></td>
+      <td>${escHtml(l.source || '—')}</td>
+      <td>${escHtml(l.branches?.name || '—')}</td>
+      <td>${escHtml(l.assigned_profile?.full_name || 'Unassigned')}</td>
+      <td>${l.value ? '$' + Number(l.value).toLocaleString() : '—'}</td>
+      <td>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-outline btn-sm" onclick="openLeadDetail('${l.id}')">View</button>
+          ${canEditLead() ? `<button class="btn btn-outline btn-sm" onclick="openEditLead('${l.id}')">Edit</button>` : ''}
+          ${currentProfile.role === 'admin' ? `<button class="btn btn-sm" style="color:var(--danger);border:1.5px solid var(--border);background:transparent" onclick="deleteLead('${l.id}')">Del</button>` : ''}
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function canEditLead() {
+  return ['admin', 'branch_manager', 'client_consultant'].includes(currentProfile.role);
+}
+
+// ---- Open Lead Detail ----
+async function openLeadDetail(id) {
+  const { data: lead } = await db.from('leads')
+    .select(`*, branches(name), assigned_profile:profiles!leads_assigned_to_fkey(full_name)`)
+    .eq('id', id).single();
+
+  if (!lead) { showToast('Lead not found', 'error'); return; }
+
+  const { data: activities } = await db.from('lead_activities')
+    .select(`*, actor:profiles!lead_activities_user_id_fkey(full_name)`)
+    .eq('lead_id', id).order('created_at', { ascending: false }).limit(10);
+
+  const modal = document.getElementById('lead-detail-modal');
+  document.getElementById('detail-name').textContent = `${lead.first_name} ${lead.last_name}`;
+  document.getElementById('detail-status').innerHTML = `<span class="badge badge-${lead.status}">${statusLabel(lead.status)}</span>`;
+
+  const fields = {
+    'detail-email': lead.email,
+    'detail-phone': lead.phone || '—',
+    'detail-source': lead.source || '—',
+    'detail-branch': lead.branches?.name || '—',
+    'detail-assigned': lead.assigned_profile?.full_name || 'Unassigned',
+    'detail-value': lead.value ? '$' + Number(lead.value).toLocaleString() : '—',
+    'detail-created': formatDate(lead.created_at),
+    'detail-updated': formatDate(lead.updated_at),
+    'detail-notes': lead.notes || 'No notes yet.',
+  };
+  Object.entries(fields).forEach(([id, val]) => setText(id, val));
+
+  // Activity timeline
+  const actEl = document.getElementById('detail-activities');
+  if (actEl) {
+    actEl.innerHTML = (activities || []).length
+      ? activities.map(a => `
+          <div class="activity-item">
+            <div class="activity-dot"></div>
+            <div class="activity-content">
+              <div class="activity-text"><strong>${escHtml(a.actor?.full_name || 'System')}</strong> — ${escHtml(a.action)}</div>
+              <div class="activity-time">${formatDate(a.created_at, true)}</div>
+            </div>
+          </div>`).join('')
+      : '<p style="color:var(--text-muted);font-size:13px">No activity yet.</p>';
+  }
+
+  // Note logging
+  document.getElementById('log-note-btn').onclick = async () => {
+    const note = document.getElementById('new-note-input').value.trim();
+    if (!note) return;
+    await db.from('lead_activities').insert({ lead_id: id, user_id: currentUser.id, action: `Note: ${note}` });
+    document.getElementById('new-note-input').value = '';
+    showToast('Note saved', 'success');
+    openLeadDetail(id);
+  };
+
+  openModal('lead-detail-modal');
+}
+
+// ---- Add / Edit Lead ----
+function openAddLead() {
+  document.getElementById('lead-form').reset();
+  document.getElementById('lead-form-id').value = '';
+  document.getElementById('lead-modal-title').textContent = 'Add New Lead';
+  populateLeadFormDropdowns();
+  openModal('lead-modal');
+}
+
+async function openEditLead(id) {
+  const lead = allLeads.find(l => l.id === id);
+  if (!lead) {
+    const { data } = await db.from('leads').select('*').eq('id', id).single();
+    if (!data) return;
+    fillLeadForm(data);
+  } else {
+    fillLeadForm(lead);
+  }
+  document.getElementById('lead-modal-title').textContent = 'Edit Lead';
+  populateLeadFormDropdowns();
+  openModal('lead-modal');
+}
+
+function fillLeadForm(lead) {
+  const f = document.getElementById('lead-form');
+  document.getElementById('lead-form-id').value = lead.id;
+  f.first_name.value = lead.first_name || '';
+  f.last_name.value = lead.last_name || '';
+  f.email.value = lead.email || '';
+  f.phone.value = lead.phone || '';
+  f.status.value = lead.status || 'new';
+  f.source.value = lead.source || '';
+  f.value.value = lead.value || '';
+  f.notes.value = lead.notes || '';
+  if (f.branch_id) f.branch_id.value = lead.branch_id || '';
+  if (f.assigned_to) f.assigned_to.value = lead.assigned_to || '';
+}
+
+async function populateLeadFormDropdowns() {
+  // Branches dropdown
+  const branchSel = document.getElementById('form-branch');
+  if (branchSel) {
+    branchSel.innerHTML = '<option value="">— Select Branch —</option>' +
+      allBranches.map(b => `<option value="${b.id}">${escHtml(b.name)}</option>`).join('');
+  }
+
+  // Consultant dropdown (admins/managers only)
+  const assignSel = document.getElementById('form-assigned');
+  if (assignSel && currentProfile.role !== 'client_consultant') {
+    let q = db.from('profiles').select('id,full_name').eq('role', 'client_consultant').eq('is_active', true);
+    if (currentProfile.role === 'branch_manager') q = q.eq('branch_id', currentProfile.branch_id);
+    const { data: consultants } = await q;
+    assignSel.innerHTML = '<option value="">— Unassigned —</option>' +
+      (consultants || []).map(c => `<option value="${c.id}">${escHtml(c.full_name)}</option>`).join('');
+  }
+
+  // Status select
+  const statusSel = document.getElementById('form-status');
+  if (statusSel) {
+    statusSel.innerHTML = LEAD_STATUSES.map(s => `<option value="${s.value}">${s.label}</option>`).join('');
+  }
+
+  // Source select
+  const sourceSel = document.getElementById('form-source');
+  if (sourceSel) {
+    sourceSel.innerHTML = '<option value="">— Select Source —</option>' +
+      LEAD_SOURCES.map(s => `<option value="${s}">${s}</option>`).join('');
+  }
+}
+
+document.getElementById('lead-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  const id = document.getElementById('lead-form-id').value;
+
+  const payload = {
+    first_name: f.first_name.value.trim(),
+    last_name: f.last_name.value.trim(),
+    email: f.email.value.trim().toLowerCase(),
+    phone: f.phone.value.trim(),
+    status: f.status.value,
+    source: f.source.value,
+    value: f.value.value ? Number(f.value.value) : null,
+    notes: f.notes.value.trim(),
+    branch_id: f.branch_id?.value || currentProfile.branch_id,
+    assigned_to: f.assigned_to?.value || null,
+    updated_at: new Date().toISOString(),
+  };
+
+  setLoading('lead-save-btn', true);
+
+  let error;
+  if (id) {
+    ({ error } = await db.from('leads').update(payload).eq('id', id));
+    if (!error) {
+      await db.from('lead_activities').insert({ lead_id: id, user_id: currentUser.id, action: 'Lead updated' });
+    }
+  } else {
+    payload.created_by = currentUser.id;
+    const { data: newLead, error: insertErr } = await db.from('leads').insert(payload).select().single();
+    error = insertErr;
+    if (!error && newLead) {
+      await db.from('lead_activities').insert({ lead_id: newLead.id, user_id: currentUser.id, action: 'Lead created' });
+    }
+  }
+
+  setLoading('lead-save-btn', false);
+
+  if (error) { showToast('Failed to save lead: ' + error.message, 'error'); return; }
+
+  showToast(id ? 'Lead updated successfully' : 'Lead added successfully', 'success');
+  closeModal('lead-modal');
+  loadLeads();
+});
+
+async function deleteLead(id) {
+  if (!confirm('Delete this lead? This action cannot be undone.')) return;
+  const { error } = await db.from('leads').delete().eq('id', id);
+  if (error) { showToast('Failed to delete lead', 'error'); return; }
+  showToast('Lead deleted', 'success');
+  loadLeads();
+}
+
+// ---- Lead Filters ----
+document.getElementById('lead-search')?.addEventListener('input', debounce(() => loadLeads(), 350));
+document.getElementById('lead-status-filter')?.addEventListener('change', () => loadLeads());
+document.getElementById('lead-branch-filter')?.addEventListener('change', () => loadLeads());
+document.getElementById('lead-consultant-filter')?.addEventListener('change', () => loadLeads());
+
+async function initLeadFilters() {
+  // Populate branch filter (admin only)
+  const branchFilter = document.getElementById('lead-branch-filter');
+  if (branchFilter && currentProfile.role === 'admin') {
+    branchFilter.innerHTML = '<option value="">All Branches</option>' +
+      allBranches.map(b => `<option value="${b.id}">${escHtml(b.name)}</option>`).join('');
+  } else if (branchFilter) {
+    branchFilter.parentElement?.remove();
+  }
+
+  // Populate consultant filter
+  const consultantFilter = document.getElementById('lead-consultant-filter');
+  if (consultantFilter && currentProfile.role !== 'client_consultant') {
+    let q = db.from('profiles').select('id,full_name').eq('role','client_consultant').eq('is_active',true);
+    if (currentProfile.role === 'branch_manager') q = q.eq('branch_id', currentProfile.branch_id);
+    const { data } = await q;
+    consultantFilter.innerHTML = '<option value="">All Consultants</option>' +
+      (data || []).map(c => `<option value="${c.id}">${escHtml(c.full_name)}</option>`).join('');
+  } else if (consultantFilter) {
+    consultantFilter.parentElement?.remove();
+  }
+}
+
+// =============================================
+//  USER MANAGEMENT (Admin only)
+// =============================================
+async function loadUsers() {
+  if (currentProfile.role !== 'admin') return;
+  showTableLoading('users-tbody', 6);
+
+  const { data: users } = await db.from('profiles')
+    .select('*, branches(name)')
+    .order('created_at', { ascending: false });
+
+  allUsers = users || [];
+
+  const tbody = document.getElementById('users-tbody');
+  if (!tbody) return;
+
+  if (!allUsers.length) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">👥</div><h4>No users found</h4></div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = allUsers.map(u => `
+    <tr>
+      <td>
+        <div class="td-user">
+          <div class="user-table-avatar">${initials(u.full_name)}</div>
+          <div class="td-user-info">
+            <div class="td-user-name">${escHtml(u.full_name || '—')}</div>
+            <div class="td-user-email">${escHtml(u.email)}</div>
+          </div>
+        </div>
+      </td>
+      <td><span class="user-role-badge ${ROLES[u.role]?.color || ''}">${ROLES[u.role]?.label || u.role}</span></td>
+      <td>${escHtml(u.branches?.name || '—')}</td>
+      <td>
+        <label class="toggle"><input type="checkbox" ${u.is_active ? 'checked' : ''} onchange="toggleUserActive('${u.id}', this.checked)"><span class="toggle-slider"></span></label>
+      </td>
+      <td>${formatDate(u.created_at)}</td>
+      <td>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-outline btn-sm" onclick="openEditUser('${u.id}')">Edit</button>
+          ${u.id !== currentUser.id ? `<button class="btn btn-sm" style="color:var(--danger);border:1.5px solid var(--border);background:transparent" onclick="deleteUser('${u.id}')">Remove</button>` : ''}
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function toggleUserActive(userId, active) {
+  const { error } = await db.from('profiles').update({ is_active: active }).eq('id', userId);
+  if (error) showToast('Failed to update user status', 'error');
+  else showToast(`User ${active ? 'activated' : 'deactivated'}`, 'success');
+}
+
+async function openEditUser(userId) {
+  const user = allUsers.find(u => u.id === userId);
+  if (!user) return;
+
+  document.getElementById('edit-user-id').value = user.id;
+  document.getElementById('edit-user-name').value = user.full_name || '';
+  document.getElementById('edit-user-role').value = user.role;
+
+  const branchSel = document.getElementById('edit-user-branch');
+  branchSel.innerHTML = '<option value="">— No Branch —</option>' +
+    allBranches.map(b => `<option value="${b.id}">${escHtml(b.name)}</option>`).join('');
+  branchSel.value = user.branch_id || '';
+
+  openModal('edit-user-modal');
+}
+
+document.getElementById('edit-user-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id = document.getElementById('edit-user-id').value;
+  const payload = {
+    full_name: document.getElementById('edit-user-name').value.trim(),
+    role: document.getElementById('edit-user-role').value,
+    branch_id: document.getElementById('edit-user-branch').value || null,
+  };
+  const { error } = await db.from('profiles').update(payload).eq('id', id);
+  if (error) { showToast('Failed to update user', 'error'); return; }
+  showToast('User updated', 'success');
+  closeModal('edit-user-modal');
+  loadUsers();
+});
+
+async function deleteUser(userId) {
+  if (!confirm('Remove this user from the system? They will lose access immediately.')) return;
+  await db.from('profiles').update({ is_active: false }).eq('id', userId);
+  showToast('User deactivated', 'success');
+  loadUsers();
+}
+
+// =============================================
+//  REPORTS
+// =============================================
+async function loadReports() {
+  let query = db.from('leads').select('status, branch_id, created_at, value, branches(name)');
+
+  if (currentProfile.role === 'branch_manager') {
+    query = query.eq('branch_id', currentProfile.branch_id);
+  } else if (currentProfile.role === 'client_consultant') {
+    query = query.eq('assigned_to', currentUser.id);
+  }
+
+  const { data: leads } = await query;
+  if (!leads) return;
+
+  const won = leads.filter(l => l.status === 'won');
+  const totalValue = won.reduce((s, l) => s + (l.value || 0), 0);
+  const convRate = leads.length ? ((won.length / leads.length) * 100).toFixed(1) : 0;
+
+  setText('report-total-leads', leads.length);
+  setText('report-total-won', won.length);
+  setText('report-conversion', convRate + '%');
+  setText('report-pipeline-value', '$' + totalValue.toLocaleString());
+
+  // Status breakdown
+  const breakdownEl = document.getElementById('report-status-breakdown');
+  if (breakdownEl) {
+    breakdownEl.innerHTML = LEAD_STATUSES.map(s => {
+      const count = leads.filter(l => l.status === s.value).length;
+      const pct = leads.length ? (count / leads.length * 100).toFixed(0) : 0;
+      return `
+        <div style="margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px">
+            <span style="font-weight:500">${s.label}</span>
+            <span style="color:var(--text-muted)">${count} leads (${pct}%)</span>
+          </div>
+          <div class="progress"><div class="progress-bar" style="width:${pct}%;background:${s.color}"></div></div>
+        </div>`;
+    }).join('');
+  }
+}
+
+// =============================================
+//  IMPORT
+// =============================================
+function initImport() {
+  const zone = document.getElementById('import-zone');
+  if (!zone) return;
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('dragover'); handleFile(e.dataTransfer.files[0]); });
+
+  document.getElementById('import-file-input')?.addEventListener('change', e => handleFile(e.target.files[0]));
+}
+
+async function handleFile(file) {
+  if (!file) return;
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (!['csv','xlsx','xls'].includes(ext)) { showToast('Please upload a CSV or Excel file', 'error'); return; }
+
+  showToast('Reading file...', 'info');
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      let rows;
+      if (ext === 'csv') {
+        rows = parseCSV(e.target.result);
+      } else {
+        // XLSX requires SheetJS (loaded from CDN)
+        const wb = XLSX.read(e.target.result, { type: 'binary' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      }
+
+      previewImport(rows, file.name);
+    } catch (err) {
+      showToast('Failed to read file: ' + err.message, 'error');
+    }
+  };
+
+  if (ext === 'csv') reader.readAsText(file);
+  else reader.readAsBinaryString(file);
+}
+
+function parseCSV(text) {
+  const lines = text.split('\n').filter(l => l.trim());
+  const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+  return lines.slice(1).map(line => {
+    const vals = line.split(',').map(v => v.trim().replace(/"/g, ''));
+    return Object.fromEntries(headers.map((h, i) => [h, vals[i] || '']));
+  });
+}
+
+function previewImport(rows, filename) {
+  if (!rows.length) { showToast('No data found in file', 'error'); return; }
+
+  const previewEl = document.getElementById('import-preview');
+  const countEl = document.getElementById('import-count');
+  if (countEl) countEl.textContent = `${rows.length} records found in "${filename}"`;
+
+  // Auto-map columns
+  const colMap = autoMapColumns(Object.keys(rows[0]));
+  document.getElementById('import-col-map').innerHTML = Object.entries(colMap).map(([src, dst]) =>
+    `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px">
+       <span style="background:var(--bg);padding:4px 10px;border-radius:4px;border:1px solid var(--border);min-width:140px">${escHtml(src)}</span>
+       <span>→</span>
+       <select class="filter-select col-map-sel" data-src="${escHtml(src)}" style="flex:1">
+         <option value="">— Skip —</option>
+         ${['first_name','last_name','email','phone','status','source','notes','value'].map(f => `<option value="${f}" ${dst===f?'selected':''}>${f}</option>`).join('')}
+       </select>
+     </div>`
+  ).join('');
+
+  // Preview table (first 5 rows)
+  const headers = Object.keys(rows[0]);
+  const previewTable = document.getElementById('import-table');
+  if (previewTable) {
+    previewTable.innerHTML = `
+      <table class="table"><thead><tr>${headers.map(h => `<th>${escHtml(h)}</th>`).join('')}</tr></thead>
+      <tbody>${rows.slice(0, 5).map(r => `<tr>${headers.map(h => `<td>${escHtml(String(r[h] || ''))}</td>`).join('')}</tr>`).join('')}</tbody>
+      </table>${rows.length > 5 ? `<p style="padding:8px 16px;font-size:12px;color:var(--text-muted)">...and ${rows.length - 5} more rows</p>` : ''}`;
+  }
+
+  if (previewEl) previewEl.style.display = 'block';
+
+  document.getElementById('confirm-import-btn').onclick = () => confirmImport(rows);
+}
+
+function autoMapColumns(headers) {
+  const map = {};
+  const aliases = {
+    first_name: ['first name','firstname','first','fname','given name'],
+    last_name: ['last name','lastname','last','lname','surname','family name'],
+    email: ['email','e-mail','email address'],
+    phone: ['phone','mobile','tel','telephone','contact number'],
+    status: ['status','lead status','stage'],
+    source: ['source','lead source','channel','origin'],
+    notes: ['notes','note','comments','remark'],
+    value: ['value','deal value','amount','deal size','revenue'],
+  };
+  headers.forEach(h => {
+    const lower = h.toLowerCase().trim();
+    for (const [field, alts] of Object.entries(aliases)) {
+      if (alts.includes(lower) || lower === field) { map[h] = field; break; }
+    }
+    if (!map[h]) map[h] = '';
+  });
+  return map;
+}
+
+async function confirmImport(rows) {
+  const colMaps = {};
+  document.querySelectorAll('.col-map-sel').forEach(sel => {
+    if (sel.value) colMaps[sel.dataset.src] = sel.value;
+  });
+
+  const leads = rows.map(row => {
+    const lead = { branch_id: currentProfile.branch_id, created_by: currentUser.id };
+    Object.entries(colMaps).forEach(([src, dst]) => {
+      lead[dst] = String(row[src] || '').trim();
+    });
+    if (!lead.status || !LEAD_STATUSES.find(s => s.value === lead.status?.toLowerCase())) {
+      lead.status = 'new';
+    } else {
+      lead.status = lead.status.toLowerCase();
+    }
+    if (lead.value) lead.value = parseFloat(lead.value.replace(/[^0-9.]/g, '')) || null;
+    return lead;
+  }).filter(l => l.email || l.first_name);
+
+  if (!leads.length) { showToast('No valid rows to import', 'error'); return; }
+
+  const btn = document.getElementById('confirm-import-btn');
+  btn.disabled = true; btn.textContent = 'Importing...';
+
+  // Insert in batches of 100
+  let imported = 0;
+  for (let i = 0; i < leads.length; i += 100) {
+    const batch = leads.slice(i, i + 100);
+    const { error } = await db.from('leads').insert(batch);
+    if (!error) imported += batch.length;
+  }
+
+  btn.disabled = false; btn.textContent = 'Import Leads';
+  showToast(`✅ Successfully imported ${imported} leads`, 'success');
+  document.getElementById('import-preview').style.display = 'none';
+  navigateTo('leads');
+}
+
+// =============================================
+//  PAGINATION
+// =============================================
+function renderPaginationControls(total, containerId, loadFn) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const start = (currentPage - 1) * PAGE_SIZE + 1;
+  const end = Math.min(currentPage * PAGE_SIZE, total);
+
+  container.innerHTML = `
+    <div class="pagination-info">Showing ${total ? start : 0}–${end} of ${total} leads</div>
+    <div class="pagination-controls">
+      <button class="page-btn" onclick="changePage(-1, '${containerId}')" ${currentPage <= 1 ? 'disabled' : ''}>‹</button>
+      ${Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+        const p = i + 1;
+        return `<button class="page-btn ${p === currentPage ? 'active' : ''}" onclick="goToPage(${p}, '${containerId}')">${p}</button>`;
+      }).join('')}
+      <button class="page-btn" onclick="changePage(1, '${containerId}')" ${currentPage >= totalPages ? 'disabled' : ''}>›</button>
+    </div>`;
+}
+
+function changePage(delta, containerId) {
+  currentPage += delta;
+  loadLeads(false);
+}
+
+function goToPage(page, containerId) {
+  currentPage = page;
+  loadLeads(false);
+}
+
+// =============================================
+//  MODAL HELPERS
+// =============================================
+function openModal(id) {
+  document.getElementById(id)?.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeModal(id) {
+  document.getElementById(id)?.classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+document.querySelectorAll('.modal-close, .modal-cancel').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const modal = btn.closest('.modal-backdrop');
+    if (modal) { modal.classList.remove('open'); document.body.style.overflow = ''; }
+  });
+});
+
+document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
+  backdrop.addEventListener('click', (e) => {
+    if (e.target === backdrop) { backdrop.classList.remove('open'); document.body.style.overflow = ''; }
+  });
+});
+
+// =============================================
+//  TOAST
+// =============================================
+function showToast(msg, type = 'info') {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  const icons = { success: '✅', error: '❌', warning: '⚠️', info: 'ℹ️' };
+  toast.innerHTML = `<span>${icons[type] || 'ℹ️'}</span><span>${escHtml(msg)}</span>`;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
+
+// =============================================
+//  UTILITIES
+// =============================================
+function escHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = String(str || '');
+  return d.innerHTML;
+}
+
+function setText(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val ?? '';
+}
+
+function formatDate(dateStr, withTime = false) {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  if (withTime) return d.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function statusLabel(s) {
+  return LEAD_STATUSES.find(x => x.value === s)?.label || s;
+}
+
+function initials(name) {
+  return (name || '?').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+}
+
+function debounce(fn, delay) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), delay); };
+}
+
+function hideLoading() {
+  document.getElementById('loading-screen')?.remove();
+}
+
+function showTableLoading(tbodyId, cols) {
+  const tbody = document.getElementById(tbodyId);
+  if (tbody) tbody.innerHTML = `<tr><td colspan="${cols}" style="text-align:center;padding:32px;color:var(--text-muted)"><div class="spinner" style="margin:0 auto"></div></td></tr>`;
+}
+
+function setLoading(btnId, loading) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  btn.disabled = loading;
+  const text = btn.querySelector('.btn-text') || btn;
+  if (btn.dataset.text && loading) text.textContent = 'Saving...';
+  else if (btn.dataset.text) text.textContent = btn.dataset.text;
+}
+
+// Global handlers for inline onclick calls
+window.openLeadDetail = openLeadDetail;
+window.openEditLead = openEditLead;
+window.deleteLead = deleteLead;
+window.openEditUser = openEditUser;
+window.deleteUser = deleteUser;
+window.toggleUserActive = toggleUserActive;
+window.changePage = changePage;
+window.goToPage = goToPage;
+window.openModal = openModal;
+window.closeModal = closeModal;
+window.openAddLead = openAddLead;
+window.navigateTo = navigateTo;
+
+// Init filters after branches loaded
+setTimeout(initLeadFilters, 500);

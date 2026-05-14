@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard — LeadFlow CRM</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+<!-- Loading screen -->
+<div class="loading-screen" id="loading-screen">
+  <div class="spinner"></div>
+  <p>Loading your dashboard...</p>
+</div>
+
+<!-- Toast container -->
+<div class="toast-container" id="toast-container"></div>
+
+<div class="app">
+
+  <!-- ===== SIDEBAR ===== -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-box">📊</div>
+      <div class="logo-text">LeadFlow <small>CRM</small></div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Main</div>
+
+      <div class="nav-item active" data-page="dashboard">
+        <span class="nav-icon">🏠</span> Dashboard
+      </div>
+
+      <div class="nav-item" data-page="leads">
+        <span class="nav-icon">👥</span> Leads
+      </div>
+
+      <div class="nav-item manager-only" data-page="reports">
+        <span class="nav-icon">📈</span> Reports
+      </div>
+
+      <div class="nav-section-label admin-only">Administration</div>
+
+      <div class="nav-item admin-only" data-page="users">
+        <span class="nav-icon">🔑</span> User Management
+      </div>
+
+      <div class="nav-item admin-only" data-page="import">
+        <span class="nav-icon">📥</span> Import Leads
+      </div>
+
+      <div class="nav-section-label">Tools</div>
+
+      <div class="nav-item manager-only" data-page="import">
+        <span class="nav-icon">📥</span> Import Leads
+      </div>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="user-card">
+        <div class="user-avatar" id="user-initials">?</div>
+        <div class="user-info">
+          <div class="user-name" id="user-name">Loading...</div>
+          <span class="user-role-badge" id="user-role"></span>
+        </div>
+        <button class="logout-btn" id="logout-btn" title="Sign out">⏻</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ===== MAIN CONTENT ===== -->
+  <main class="main">
+
+    <!-- Topbar -->
+    <header class="topbar">
+      <button class="topbar-menu-btn" aria-label="Menu">☰</button>
+      <h1 class="topbar-title">Dashboard</h1>
+      <div class="topbar-search">
+        <span>🔍</span>
+        <input type="text" placeholder="Quick search leads..." id="global-search" />
+      </div>
+      <div class="topbar-actions">
+        <button class="icon-btn" title="Refresh" onclick="location.reload()">🔄</button>
+        <button class="btn btn-primary btn-sm" onclick="navigateTo('leads');setTimeout(openAddLead,200)">+ Add Lead</button>
+      </div>
+    </header>
+
+    <!-- ========== DASHBOARD PAGE ========== -->
+    <section class="page active" id="page-dashboard">
+      <div class="page-header">
+        <div class="page-header-left">
+          <h2>Overview</h2>
+          <p id="dashboard-greeting">Good day — here's your lead summary</p>
+        </div>
+        <div class="page-header-right">
+          <button class="btn btn-outline btn-sm" onclick="loadDashboard()">🔄 Refresh</button>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon blue">📋</div>
+          <div class="stat-info">
+            <div class="stat-label">Total Leads</div>
+            <div class="stat-value" id="stat-total">—</div>
+            <div class="stat-change up">All time</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon green">✅</div>
+          <div class="stat-info">
+            <div class="stat-label">Won</div>
+            <div class="stat-value" id="stat-won">—</div>
+            <div class="stat-change up">Converted leads</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon amber">⚡</div>
+          <div class="stat-info">
+            <div class="stat-label">Active Pipeline</div>
+            <div class="stat-value" id="stat-active">—</div>
+            <div class="stat-change up">In progress</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon purple">📅</div>
+          <div class="stat-info">
+            <div class="stat-label">This Month</div>
+            <div class="stat-value" id="stat-month">—</div>
+            <div class="stat-change up">New leads</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pipeline + Recent Leads -->
+      <div class="grid-2" style="margin-bottom:18px">
+        <!-- Pipeline -->
+        <div class="card">
+          <div class="card-header">
+            <h3>Lead Pipeline</h3>
+            <button class="btn btn-outline btn-sm" onclick="navigateTo('leads')">View All →</button>
+          </div>
+          <div class="card-body">
+            <div class="pipeline-bar" id="pipeline-bar"></div>
+            <div class="pipeline-legend" id="pipeline-legend"></div>
+          </div>
+        </div>
+
+        <!-- Quick actions -->
+        <div class="card">
+          <div class="card-header"><h3>Quick Actions</h3></div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
+            <button class="btn btn-primary" onclick="navigateTo('leads');setTimeout(openAddLead,200)">
+              ➕ Add New Lead
+            </button>
+            <button class="btn btn-outline" onclick="navigateTo('leads')">
+              📋 View All Leads
+            </button>
+            <button class="btn btn-outline manager-only" onclick="navigateTo('reports')">
+              📊 View Reports
+            </button>
+            <button class="btn btn-outline admin-only" onclick="navigateTo('import')">
+              📥 Import from Excel/CSV
+            </button>
+            <button class="btn btn-outline admin-only" onclick="navigateTo('users')">
+              👤 Manage Users
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Leads Table -->
+      <div class="card">
+        <div class="card-header">
+          <h3>Recent Leads</h3>
+          <button class="btn btn-outline btn-sm" onclick="navigateTo('leads')">View All →</button>
+        </div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Name</th><th>Email</th><th>Status</th><th>Added</th><th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="recent-leads-body">
+              <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted)">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== LEADS PAGE ========== -->
+    <section class="page" id="page-leads">
+      <div class="page-header">
+        <div class="page-header-left">
+          <h2>Lead Management</h2>
+          <p>View, filter, and manage all leads</p>
+        </div>
+        <div class="page-header-right">
+          <button class="btn btn-outline" onclick="navigateTo('import')">📥 Import</button>
+          <button class="btn btn-primary" onclick="openAddLead()">+ Add Lead</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <!-- Filters -->
+        <div class="filters-bar">
+          <div class="filter-search">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="lead-search" placeholder="Search name, email, phone..." />
+          </div>
+          <select class="filter-select" id="lead-status-filter">
+            <option value="">All Statuses</option>
+            <option value="new">New</option>
+            <option value="contacted">Contacted</option>
+            <option value="qualified">Qualified</option>
+            <option value="proposal">Proposal</option>
+            <option value="won">Won</option>
+            <option value="lost">Lost</option>
+          </select>
+          <select class="filter-select admin-only" id="lead-branch-filter">
+            <option value="">All Branches</option>
+          </select>
+          <select class="filter-select" id="lead-consultant-filter">
+            <option value="">All Consultants</option>
+          </select>
+          <button class="btn btn-outline btn-sm" onclick="document.getElementById('lead-search').value='';document.getElementById('lead-status-filter').value='';loadLeads()">Clear</button>
+        </div>
+
+        <!-- Table -->
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Lead</th>
+                <th>Phone</th>
+                <th>Status</th>
+                <th>Source</th>
+                <th>Branch</th>
+                <th>Assigned To</th>
+                <th>Value</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="leads-tbody">
+              <tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text-muted)">Loading leads...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div id="leads-pagination"></div>
+      </div>
+    </section>
+
+    <!-- ========== USERS PAGE (Admin) ========== -->
+    <section class="page admin-only" id="page-users">
+      <div class="page-header">
+        <div class="page-header-left">
+          <h2>User Management</h2>
+          <p>Activate accounts, assign roles and branches</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>User</th><th>Role</th><th>Branch</th><th>Active</th><th>Joined</th><th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="users-tbody">
+              <tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-muted)">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== REPORTS PAGE ========== -->
+    <section class="page" id="page-reports">
+      <div class="page-header">
+        <div class="page-header-left">
+          <h2>Reports & Analytics</h2>
+          <p>Performance summary for your leads</p>
+        </div>
+      </div>
+
+      <div class="stats-grid" style="margin-bottom:24px">
+        <div class="stat-card">
+          <div class="stat-icon blue">📋</div>
+          <div class="stat-info">
+            <div class="stat-label">Total Leads</div>
+            <div class="stat-value" id="report-total-leads">—</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon green">🏆</div>
+          <div class="stat-info">
+            <div class="stat-label">Won Deals</div>
+            <div class="stat-value" id="report-total-won">—</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon purple">📊</div>
+          <div class="stat-info">
+            <div class="stat-label">Conversion Rate</div>
+            <div class="stat-value" id="report-conversion">—</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon amber">💰</div>
+          <div class="stat-info">
+            <div class="stat-label">Won Pipeline Value</div>
+            <div class="stat-value" id="report-pipeline-value">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>Status Breakdown</h3></div>
+        <div class="card-body" id="report-status-breakdown">
+          <div style="text-align:center;color:var(--text-muted);padding:24px">Loading...</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== IMPORT PAGE ========== -->
+    <section class="page" id="page-import">
+      <div class="page-header">
+        <div class="page-header-left">
+          <h2>Import Leads</h2>
+          <p>Upload an Excel (.xlsx) or CSV file to bulk-import leads</p>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:18px">
+        <div class="card-body">
+          <div class="import-zone" id="import-zone" onclick="document.getElementById('import-file-input').click()">
+            <div class="import-icon">📂</div>
+            <h4>Drag & drop your file here</h4>
+            <p>Supports Excel (.xlsx, .xls) and CSV — or click to browse</p>
+            <input type="file" id="import-file-input" accept=".csv,.xlsx,.xls" style="display:none" />
+          </div>
+
+          <div id="import-preview" style="display:none;margin-top:24px">
+            <h4 style="margin-bottom:4px" id="import-count"></h4>
+            <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">
+              Map your spreadsheet columns to the correct lead fields, then click Import.
+            </p>
+
+            <div class="grid-2">
+              <div>
+                <h5 style="font-size:13px;font-weight:600;margin-bottom:12px">Column Mapping</h5>
+                <div id="import-col-map"></div>
+              </div>
+              <div>
+                <h5 style="font-size:13px;font-weight:600;margin-bottom:12px">Preview (first 5 rows)</h5>
+                <div id="import-table" style="overflow-x:auto;font-size:12px"></div>
+              </div>
+            </div>
+
+            <div style="margin-top:20px;display:flex;gap:10px">
+              <button class="btn btn-primary" id="confirm-import-btn">📥 Import Leads</button>
+              <button class="btn btn-outline" onclick="document.getElementById('import-preview').style.display='none'">Cancel</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>Import Tips</h3></div>
+        <div class="card-body">
+          <ul style="font-size:13.5px;color:var(--text-secondary);line-height:2;padding-left:20px;list-style:disc">
+            <li>First row must be column headers (e.g. "First Name", "Email", "Phone")</li>
+            <li>Supported status values: <code>new</code>, <code>contacted</code>, <code>qualified</code>, <code>proposal</code>, <code>won</code>, <code>lost</code></li>
+            <li>Emails must be valid — duplicate emails will still import (you can deduplicate later)</li>
+            <li>Lead value should be a number (e.g. <code>5000</code> not <code>$5,000</code>)</li>
+            <li>All imported leads are assigned to the current branch by default</li>
+            <li>Sensitive data is encrypted at rest in Supabase — only authorised users can view it</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ===== MODAL: Add / Edit Lead ===== -->
+<div class="modal-backdrop" id="lead-modal">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <h3 id="lead-modal-title">Add New Lead</h3>
+      <button class="modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <form id="lead-form" autocomplete="off">
+        <input type="hidden" id="lead-form-id" />
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">First Name *</label>
+            <input class="form-control" type="text" name="first_name" placeholder="Jane" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Last Name *</label>
+            <input class="form-control" type="text" name="last_name" placeholder="Smith" required />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Email Address *</label>
+            <input class="form-control" type="email" name="email" placeholder="jane@email.com" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Phone Number</label>
+            <input class="form-control" type="tel" name="phone" placeholder="+1 555 0100" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Status</label>
+            <select class="form-control" name="status" id="form-status">
+              <option value="new">New</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Source</label>
+            <select class="form-control" name="source" id="form-source">
+              <option value="">— Select source —</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Branch</label>
+            <select class="form-control" name="branch_id" id="form-branch">
+              <option value="">— Select branch —</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Assign To</label>
+            <select class="form-control" name="assigned_to" id="form-assigned">
+              <option value="">— Unassigned —</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Deal Value ($)</label>
+          <input class="form-control" type="number" name="value" placeholder="e.g. 5000" min="0" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Notes</label>
+          <textarea class="form-control notes-area" name="notes" placeholder="Any relevant notes about this lead..."></textarea>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline modal-cancel">Cancel</button>
+      <button class="btn btn-primary" id="lead-save-btn" data-text="Save Lead" onclick="document.getElementById('lead-form').requestSubmit()">
+        <span class="btn-text">Save Lead</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: Lead Detail ===== -->
+<div class="modal-backdrop" id="lead-detail-modal">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <div>
+        <h3 id="detail-name">Lead Details</h3>
+        <div id="detail-status" style="margin-top:4px"></div>
+      </div>
+      <button class="modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-label">Email</div>
+          <div class="detail-value" id="detail-email">—</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Phone</div>
+          <div class="detail-value" id="detail-phone">—</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Source</div>
+          <div class="detail-value" id="detail-source">—</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Branch</div>
+          <div class="detail-value" id="detail-branch">—</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Assigned To</div>
+          <div class="detail-value" id="detail-assigned">—</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Deal Value</div>
+          <div class="detail-value" id="detail-value">—</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Created</div>
+          <div class="detail-value" id="detail-created">—</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Last Updated</div>
+          <div class="detail-value" id="detail-updated">—</div>
+        </div>
+      </div>
+
+      <hr class="detail-divider" />
+
+      <div class="detail-item" style="margin-bottom:16px">
+        <div class="detail-label">Notes</div>
+        <div class="detail-value" id="detail-notes" style="white-space:pre-wrap;line-height:1.6">—</div>
+      </div>
+
+      <hr class="detail-divider" />
+
+      <h4 style="font-size:14px;font-weight:600;margin-bottom:12px">Activity Log</h4>
+      <div class="activity-list" id="detail-activities"></div>
+
+      <div style="margin-top:16px;display:flex;gap:8px;align-items:flex-end">
+        <textarea class="notes-area" id="new-note-input" placeholder="Log a note or action..." style="flex:1;min-height:60px"></textarea>
+        <button class="btn btn-primary" id="log-note-btn">Log Note</button>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline modal-cancel">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: Edit User ===== -->
+<div class="modal-backdrop" id="edit-user-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Edit User</h3>
+      <button class="modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <form id="edit-user-form">
+        <input type="hidden" id="edit-user-id" />
+        <div class="form-group">
+          <label class="form-label">Full Name</label>
+          <input class="form-control" type="text" id="edit-user-name" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Role</label>
+          <select class="form-control" id="edit-user-role">
+            <option value="admin">Admin</option>
+            <option value="branch_manager">Branch Manager</option>
+            <option value="client_consultant">Client Consultant</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Branch</label>
+          <select class="form-control" id="edit-user-branch">
+            <option value="">— No Branch —</option>
+          </select>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline modal-cancel">Cancel</button>
+      <button class="btn btn-primary" onclick="document.getElementById('edit-user-form').requestSubmit()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Supabase + SheetJS (for Excel import) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/app.js"></script>
+
+<script>
+  // Greeting
+  const hour = new Date().getHours();
+  const greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  document.getElementById('dashboard-greeting').textContent = `${greet} — here's your lead summary`;
+
+  // Global search shortcut
+  document.getElementById('global-search')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      navigateTo('leads');
+      setTimeout(() => {
+        const s = document.getElementById('lead-search');
+        if (s) { s.value = e.target.value; loadLeads(); }
+      }, 100);
+    }
+  });
+</script>
+</body>
+</html>
