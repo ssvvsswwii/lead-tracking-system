@@ -705,7 +705,7 @@ function previewImport(rows, filename) {
        <span>→</span>
        <select class="filter-select col-map-sel" data-src="${escHtml(src)}" style="flex:1">
          <option value="">— Skip —</option>
-         ${['first_name','last_name','email','phone','status','source','notes','value'].map(f => `<option value="${f}" ${dst===f?'selected':''}>${f}</option>`).join('')}
+         ${['full_name','first_name','last_name','phone','email','status','source','notes','value','caller','date'].map(f => `<option value="${f}" ${dst===f?'selected':''}>${f}</option>`).join('')}
        </select>
      </div>`
   ).join('');
@@ -728,14 +728,17 @@ function previewImport(rows, filename) {
 function autoMapColumns(headers) {
   const map = {};
   const aliases = {
+    full_name:  ['name', 'full name', 'fullname', 'client name', 'customer name'],
     first_name: ['first name','firstname','first','fname','given name'],
-    last_name: ['last name','lastname','last','lname','surname','family name'],
-    email: ['email','e-mail','email address'],
-    phone: ['phone','mobile','tel','telephone','contact number'],
-    status: ['status','lead status','stage'],
-    source: ['source','lead source','channel','origin'],
-    notes: ['notes','note','comments','remark'],
-    value: ['value','deal value','amount','deal size','revenue'],
+    last_name:  ['last name','lastname','last','lname','surname','family name'],
+    email:      ['email','e-mail','email address','contact'],
+    phone:      ['phone','phone no','phone number','mobile','tel','telephone','contact number','hp'],
+    status:     ['status','lead status','stage','result'],
+    source:     ['source','lead source','channel','origin','responses'],
+    notes:      ['notes','note','comments','remark','remarks'],
+    value:      ['value','deal value','amount','deal size','revenue'],
+    caller:     ['caller','agent','consultant','assigned to','staff'],
+    date:       ['date','date added','created','lead date'],
   };
   headers.forEach(h => {
     const lower = h.toLowerCase().trim();
@@ -754,34 +757,82 @@ async function confirmImport(rows) {
   });
 
   const leads = rows.map(row => {
+    // Skip completely empty rows
+    const hasAnyValue = Object.values(row).some(v => String(v || '').trim() !== '');
+    if (!hasAnyValue) return null;
+
     const lead = { branch_id: currentProfile.branch_id, created_by: currentUser.id };
     Object.entries(colMaps).forEach(([src, dst]) => {
-      lead[dst] = String(row[src] || '').trim();
+      const val = String(row[src] || '').trim();
+      if (!val) return;
+      if (dst === 'full_name') {
+        const parts = val.split(/\s+/);
+        lead.first_name = parts[0] || '';
+        lead.last_name = parts.slice(1).join(' ') || '';
+      } else if (dst === 'caller') {
+        lead.notes = (lead.notes ? lead.notes + ' | ' : '') + 'Caller: ' + val;
+      } else if (dst === 'date') {
+        // Handle DD/MM/YY and DD/MM/YYYY formats
+        const ddmmyy = val.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+        if (ddmmyy) {
+          let [, d, m, y] = ddmmyy;
+          if (y.length === 2) y = '20' + y;
+          const parsed = new Date(`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`);
+          if (!isNaN(parsed)) lead.created_at = parsed.toISOString();
+        } else {
+          const parsed = new Date(val);
+          if (!isNaN(parsed)) lead.created_at = parsed.toISOString();
+        }
+      } else {
+        lead[dst] = val;
+      }
     });
-    if (!lead.status || !LEAD_STATUSES.find(s => s.value === lead.status?.toLowerCase())) {
-      lead.status = 'new';
-    } else {
-      lead.status = lead.status.toLowerCase();
-    }
-    if (lead.value) lead.value = parseFloat(lead.value.replace(/[^0-9.]/g, '')) || null;
-    return lead;
-  }).filter(l => l.email || l.first_name);
+
+    // Normalise status
+    const statusVal = (lead.status || '').toLowerCase().trim();
+    const matched = LEAD_STATUSES.find(s => s.value === statusVal || s.label.toLowerCase() === statusVal);
+    lead.status = matched ? matched.value : 'new';
+
+    // Clean up value field
+    if (lead.value) lead.value = parseFloat(String(lead.value).replace(/[^0-9.]/g, '')) || null;
+
+    // Must have at least a name or phone to be worth importing
+    return (lead.first_name || lead.last_name || lead.phone) ? lead : null;
+  }).filter(Boolean);
 
   if (!leads.length) { showToast('No valid rows to import', 'error'); return; }
 
   const btn = document.getElementById('confirm-import-btn');
-  btn.disabled = true; btn.textContent = 'Importing...';
+  btn.disabled = true;
 
-  // Insert in batches of 100
+  // Insert in batches of 500 with progress updates
   let imported = 0;
-  for (let i = 0; i < leads.length; i += 100) {
-    const batch = leads.slice(i, i + 100);
+  let failed = 0;
+  const batchSize = 500;
+
+  for (let i = 0; i < leads.length; i += batchSize) {
+    const batch = leads.slice(i, i + batchSize);
+    const progress = Math.round(((i + batch.length) / leads.length) * 100);
+    btn.textContent = `Importing... ${progress}% (${i + batch.length}/${leads.length})`;
+
     const { error } = await db.from('leads').insert(batch);
-    if (!error) imported += batch.length;
+    if (!error) {
+      imported += batch.length;
+    } else {
+      // Try row-by-row on batch failure to salvage good rows
+      for (const lead of batch) {
+        const { error: rowErr } = await db.from('leads').insert(lead);
+        if (!rowErr) imported++;
+        else failed++;
+      }
+    }
   }
 
   btn.disabled = false; btn.textContent = 'Import Leads';
-  showToast(`✅ Successfully imported ${imported} leads`, 'success');
+  const msg = failed > 0
+    ? `✅ Imported ${imported} leads. ⚠️ ${failed} rows had errors and were skipped.`
+    : `✅ Successfully imported ${imported} leads`;
+  showToast(msg, failed > 0 ? 'warning' : 'success');
   document.getElementById('import-preview').style.display = 'none';
   navigateTo('leads');
 }
