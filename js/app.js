@@ -69,7 +69,7 @@ function navigateTo(page) {
     import: 'Import Leads',
   }[page] || page;
 
-  if (page === 'leads') loadLeads();
+  if (page === 'leads') { loadLeads(); populateBulkConsultantDropdown(); }
   if (page === 'users') loadUsers();
   if (page === 'reports') loadReports();
   if (page === 'import') initImport();
@@ -285,12 +285,13 @@ function renderLeadsTable(leads) {
   if (!tbody) return;
 
   if (!leads.length) {
-    tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">📋</div><h4>No leads found</h4><p>Try adjusting your filters or add a new lead.</p></div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">📋</div><h4>No leads found</h4><p>Try adjusting your filters or add a new lead.</p></div></td></tr>`;
     return;
   }
 
   tbody.innerHTML = leads.map(l => `
     <tr>
+      <td><input type="checkbox" class="lead-checkbox" value="${l.id}" onchange="updateBulkBar()" /></td>
       <td>
         <div style="font-weight:600">${escHtml(l.first_name)} ${escHtml(l.last_name)}</div>
         <div style="font-size:12px;color:var(--text-muted)">${escHtml(l.email)}</div>
@@ -299,7 +300,7 @@ function renderLeadsTable(leads) {
       <td><span class="badge badge-${l.status}">${statusLabel(l.status)}</span></td>
       <td>${escHtml(l.source || '—')}</td>
       <td>${escHtml(l.branches?.name || '—')}</td>
-      <td>${escHtml(l.assigned_profile?.full_name || 'Unassigned')}</td>
+      <td>${escHtml(l.assigned_profile?.full_name || l.assigned_name || 'Unassigned')}</td>
       <td>${l.value ? '$' + Number(l.value).toLocaleString() : '—'}</td>
       <td style="white-space:nowrap">
         <div style="display:flex;gap:4px">
@@ -310,6 +311,70 @@ function renderLeadsTable(leads) {
       </td>
     </tr>
   `).join('');
+}
+
+function toggleSelectAll(checkbox) {
+  document.querySelectorAll('.lead-checkbox').forEach(cb => cb.checked = checkbox.checked);
+  updateBulkBar();
+}
+
+function updateBulkBar() {
+  const selected = document.querySelectorAll('.lead-checkbox:checked');
+  const bar = document.getElementById('bulk-bar');
+  const countEl = document.getElementById('bulk-count');
+  if (selected.length > 0) {
+    bar.style.display = 'flex';
+    countEl.textContent = `${selected.length} lead${selected.length > 1 ? 's' : ''} selected`;
+  } else {
+    bar.style.display = 'none';
+  }
+}
+
+function clearSelection() {
+  document.querySelectorAll('.lead-checkbox').forEach(cb => cb.checked = false);
+  const selectAll = document.getElementById('select-all-leads');
+  if (selectAll) selectAll.checked = false;
+  document.getElementById('bulk-bar').style.display = 'none';
+}
+
+async function bulkAssign() {
+  const selected = [...document.querySelectorAll('.lead-checkbox:checked')].map(cb => cb.value);
+  if (!selected.length) return;
+
+  const consultantId = document.getElementById('bulk-consultant-select').value;
+  const consultantName = document.getElementById('bulk-consultant-name').value.trim();
+
+  if (!consultantId && !consultantName) {
+    showToast('Please select a consultant or type a name', 'error');
+    return;
+  }
+
+  const payload = {};
+  if (consultantId) {
+    payload.assigned_to = consultantId;
+    payload.assigned_name = null;
+  } else {
+    payload.assigned_name = consultantName;
+    payload.assigned_to = null;
+  }
+
+  const { error } = await db.from('leads').update(payload).in('id', selected);
+  if (error) { showToast('Failed to assign leads', 'error'); return; }
+
+  showToast(`✅ ${selected.length} lead${selected.length > 1 ? 's' : ''} assigned to ${consultantId ? '' : consultantName}`, 'success');
+  clearSelection();
+  loadLeads();
+}
+
+async function populateBulkConsultantDropdown() {
+  let q = db.from('profiles').select('id,full_name').eq('role','client_consultant').eq('is_active',true);
+  if (currentProfile.role === 'branch_manager') q = q.eq('branch_id', currentProfile.branch_id);
+  const { data } = await q;
+  const sel = document.getElementById('bulk-consultant-select');
+  if (sel) {
+    sel.innerHTML = '<option value="">— Assign to consultant —</option>' +
+      (data || []).map(c => `<option value="${c.id}">${escHtml(c.full_name)}</option>`).join('');
+  }
 }
 
 function canEditLead() {
@@ -1081,6 +1146,10 @@ function setLoading(btnId, loading) {
 })();
 
 // Global handlers for inline onclick calls
+window.toggleSelectAll = toggleSelectAll;
+window.updateBulkBar = updateBulkBar;
+window.clearSelection = clearSelection;
+window.bulkAssign = bulkAssign;
 window.openLeadDetail = openLeadDetail;
 window.openEditLead = openEditLead;
 window.deleteLead = deleteLead;

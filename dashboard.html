@@ -208,6 +208,18 @@
         </div>
       </div>
 
+      <!-- Bulk action bar (hidden until leads selected) -->
+      <div id="bulk-bar" style="display:none;background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:12px 16px;margin-bottom:12px;display:none;align-items:center;gap:12px;flex-wrap:wrap">
+        <span id="bulk-count" style="font-size:13px;font-weight:600;color:#1e40af">0 leads selected</span>
+        <select id="bulk-consultant-select" class="filter-select" style="min-width:200px">
+          <option value="">— Assign to consultant —</option>
+        </select>
+        <input type="text" id="bulk-consultant-name" class="form-control" placeholder="Or type consultant name (if not signed up yet)" style="flex:1;min-width:200px;padding:7px 12px" />
+        <button class="btn btn-primary btn-sm" onclick="bulkAssign()">✅ Assign Selected</button>
+        <button class="btn btn-outline btn-sm" onclick="clearSelection()">✕ Clear</button>
+      </div>
+      </div>
+
       <div class="card">
         <!-- Filters -->
         <div class="filters-bar">
@@ -244,6 +256,7 @@
           <table class="table">
             <thead>
               <tr>
+                <th><input type="checkbox" id="select-all-leads" onchange="toggleSelectAll(this)" title="Select all" /></th>
                 <th>Lead</th>
                 <th>Phone</th>
                 <th>Status</th>
