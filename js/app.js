@@ -247,7 +247,7 @@ async function loadLeads(resetPage = true) {
   let query = db.from('leads')
     .select(`
       id, first_name, last_name, email, phone, status, source,
-      created_at, updated_at, notes, value,
+      created_at, updated_at, notes, value, assigned_name,
       branches(name),
       assigned_profile:profiles!leads_assigned_to_fkey(full_name)
     `, { count: 'exact' })
