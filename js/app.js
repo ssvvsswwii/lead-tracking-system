@@ -223,6 +223,15 @@ async function loadLeads(resetPage = true) {
   const branchFilter = document.getElementById('lead-branch-filter')?.value || '';
   const consultantFilter = document.getElementById('lead-consultant-filter')?.value || '';
 
+  const sortVal = document.getElementById('lead-sort')?.value || 'created_at_desc';
+  const sortMap = {
+    name_asc:        { column: 'first_name', ascending: true },
+    name_desc:       { column: 'first_name', ascending: false },
+    created_at_asc:  { column: 'created_at', ascending: true },
+    created_at_desc: { column: 'created_at', ascending: false },
+  };
+  const { column: sortCol, ascending: sortAsc } = sortMap[sortVal] || sortMap.created_at_desc;
+
   let query = db.from('leads')
     .select(`
       id, first_name, last_name, email, phone, status, source,
@@ -230,7 +239,7 @@ async function loadLeads(resetPage = true) {
       branches(name),
       assigned_profile:profiles!leads_assigned_to_fkey(full_name)
     `, { count: 'exact' })
-    .order('created_at', { ascending: false });
+    .order(sortCol, { ascending: sortAsc });
 
   // Role-based scoping (enforced by RLS too — this just improves UX)
   if (currentProfile.role === 'branch_manager') {
@@ -480,6 +489,7 @@ document.getElementById('lead-search')?.addEventListener('input', debounce(() =>
 document.getElementById('lead-status-filter')?.addEventListener('change', () => loadLeads());
 document.getElementById('lead-branch-filter')?.addEventListener('change', () => loadLeads());
 document.getElementById('lead-consultant-filter')?.addEventListener('change', () => loadLeads());
+document.getElementById('lead-sort')?.addEventListener('change', () => loadLeads());
 
 async function initLeadFilters() {
   // Populate branch filter (admin only)

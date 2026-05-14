@@ -230,7 +230,13 @@
           <select class="filter-select" id="lead-consultant-filter">
             <option value="">All Consultants</option>
           </select>
-          <button class="btn btn-outline btn-sm" onclick="document.getElementById('lead-search').value='';document.getElementById('lead-status-filter').value='';loadLeads()">Clear</button>
+          <select class="filter-select" id="lead-sort">
+            <option value="created_at_desc">Newest First</option>
+            <option value="name_asc">Name A → Z</option>
+            <option value="name_desc">Name Z → A</option>
+            <option value="created_at_asc">Oldest First</option>
+          </select>
+          <button class="btn btn-outline btn-sm" onclick="document.getElementById('lead-search').value='';document.getElementById('lead-status-filter').value='';document.getElementById('lead-sort').value='created_at_desc';loadLeads()">Clear</button>
         </div>
 
         <!-- Table -->
