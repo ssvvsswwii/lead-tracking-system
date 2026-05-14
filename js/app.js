@@ -1008,6 +1008,73 @@ function setLoading(btnId, loading) {
   else if (btn.dataset.text) text.textContent = btn.dataset.text;
 }
 
+// =============================================
+//  AUTO-LOGOUT AFTER 5 MINUTES INACTIVITY
+// =============================================
+(function initAutoLogout() {
+  const INACTIVE_LIMIT = 5 * 60 * 1000;   // 5 minutes
+  const WARN_BEFORE    = 60 * 1000;        // warn 1 minute before logout
+  let logoutTimer, warnTimer, warningEl;
+
+  function createWarning() {
+    warningEl = document.createElement('div');
+    warningEl.id = 'inactivity-warning';
+    warningEl.style.cssText = `
+      position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+      background:#1e293b; color:white; padding:14px 24px; border-radius:10px;
+      font-size:14px; z-index:9999; box-shadow:0 4px 20px rgba(0,0,0,.3);
+      display:flex; align-items:center; gap:16px;
+    `;
+    warningEl.innerHTML = `
+      <span>⚠️ You'll be logged out in <strong id="countdown">60</strong>s due to inactivity</span>
+      <button onclick="resetInactivityTimer()" style="background:#2563eb;border:none;color:white;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:13px">Stay logged in</button>
+    `;
+    document.body.appendChild(warningEl);
+
+    // Countdown
+    let secs = 60;
+    const countInterval = setInterval(() => {
+      secs--;
+      const el = document.getElementById('countdown');
+      if (el) el.textContent = secs;
+      if (secs <= 0) clearInterval(countInterval);
+    }, 1000);
+    warningEl._countInterval = countInterval;
+  }
+
+  function removeWarning() {
+    if (warningEl) {
+      clearInterval(warningEl._countInterval);
+      warningEl.remove();
+      warningEl = null;
+    }
+  }
+
+  async function autoLogout() {
+    removeWarning();
+    await db.auth.signOut();
+    window.location.href = 'index.html';
+  }
+
+  function resetInactivityTimer() {
+    clearTimeout(logoutTimer);
+    clearTimeout(warnTimer);
+    removeWarning();
+
+    warnTimer   = setTimeout(createWarning, INACTIVE_LIMIT - WARN_BEFORE);
+    logoutTimer = setTimeout(autoLogout,    INACTIVE_LIMIT);
+  }
+
+  // Reset on any user interaction
+  ['mousemove','mousedown','keydown','touchstart','scroll','click'].forEach(evt => {
+    document.addEventListener(evt, resetInactivityTimer, { passive: true });
+  });
+
+  // Start the timer
+  resetInactivityTimer();
+  window.resetInactivityTimer = resetInactivityTimer;
+})();
+
 // Global handlers for inline onclick calls
 window.openLeadDetail = openLeadDetail;
 window.openEditLead = openEditLead;
