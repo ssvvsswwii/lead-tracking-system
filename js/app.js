@@ -247,7 +247,7 @@ async function loadLeads(resetPage = true) {
   let query = db.from('leads')
     .select(`
       id, first_name, last_name, email, phone, status, source,
-      created_at, updated_at, notes, value, assigned_name,
+      created_at, updated_at, notes, assigned_name,
       branches(name),
       assigned_profile:profiles!leads_assigned_to_fkey(full_name)
     `, { count: 'exact' })
@@ -301,7 +301,6 @@ function renderLeadsTable(leads) {
       <td>${escHtml(l.source || '—')}</td>
       <td>${escHtml(l.branches?.name || '—')}</td>
       <td>${escHtml(l.assigned_profile?.full_name || l.assigned_name || 'Unassigned')}</td>
-      <td>${l.value ? '$' + Number(l.value).toLocaleString() : '—'}</td>
       <td style="white-space:nowrap">
         <div style="display:flex;gap:4px">
           <button class="btn btn-outline btn-sm" style="padding:4px 8px;font-size:12px" onclick="openLeadDetail('${l.id}')">View</button>
@@ -402,11 +401,10 @@ async function openLeadDetail(id) {
     'detail-phone': lead.phone || '—',
     'detail-source': lead.source || '—',
     'detail-branch': lead.branches?.name || '—',
-    'detail-assigned': lead.assigned_profile?.full_name || 'Unassigned',
-    'detail-value': lead.value ? '$' + Number(lead.value).toLocaleString() : '—',
+    'detail-assigned': lead.assigned_profile?.full_name || lead.assigned_name || 'Unassigned',
+    'detail-social-media': lead.social_media || '—',
     'detail-created': formatDate(lead.created_at),
     'detail-updated': formatDate(lead.updated_at),
-    'detail-social-media': lead.social_media || '—',
     'detail-notes': lead.notes || 'No notes yet.',
   };
   Object.entries(fields).forEach(([id, val]) => setText(id, val));
@@ -471,7 +469,6 @@ function fillLeadForm(lead) {
   f.phone.value = lead.phone || '';
   f.status.value = lead.status || 'new';
   f.source.value = lead.source || '';
-  f.value.value = lead.value || '';
   f.notes.value = lead.notes || '';
   if (f.branch_id) f.branch_id.value = lead.branch_id || '';
   if (f.assigned_to) f.assigned_to.value = lead.assigned_to || '';
@@ -549,7 +546,6 @@ document.getElementById('lead-form')?.addEventListener('submit', async (e) => {
     status: f.status.value,
     source: f.source.value,
     social_media: socialMedia || null,
-    value: f.value.value ? Number(f.value.value) : null,
     notes: f.notes.value.trim(),
     branch_id: f.branch_id?.value || currentProfile.branch_id,
     assigned_to: f.assigned_to?.value || null,
@@ -737,20 +733,12 @@ async function loadReports() {
   }));
 
   const total = Object.values(statusCounts).reduce((a, b) => a + b, 0);
-  const won = statusCounts['won'] || 0;
-  const convRate = total ? ((won / total) * 100).toFixed(1) : 0;
-
-  // Get total won value
-  let valQuery = db.from('leads').select('value').eq('status', 'won').not('value', 'is', null);
-  if (currentProfile.role === 'branch_manager') valQuery = valQuery.eq('branch_id', currentProfile.branch_id);
-  if (currentProfile.role === 'client_consultant') valQuery = valQuery.eq('assigned_to', currentUser.id);
-  const { data: wonLeads } = await valQuery;
-  const totalValue = (wonLeads || []).reduce((s, l) => s + (l.value || 0), 0);
+  const converted = statusCounts['converted'] || 0;
+  const convRate = total ? ((converted / total) * 100).toFixed(1) : 0;
 
   setText('report-total-leads', total);
-  setText('report-total-won', won);
+  setText('report-total-won', converted);
   setText('report-conversion', convRate + '%');
-  setText('report-pipeline-value', '$' + totalValue.toLocaleString());
 
   // Status breakdown
   const breakdownEl = document.getElementById('report-status-breakdown');

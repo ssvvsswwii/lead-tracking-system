@@ -13,12 +13,12 @@ const APP_VERSION = '1.0.0';
 
 // Lead status options (order matters — used for pipeline display)
 const LEAD_STATUSES = [
-  { value: 'new',        label: 'New',        color: '#2563eb' },
-  { value: 'contacted',  label: 'Contacted',  color: '#d97706' },
-  { value: 'qualified',  label: 'Qualified',  color: '#7c3aed' },
-  { value: 'proposal',   label: 'Proposal',   color: '#ea580c' },
-  { value: 'won',        label: 'Won',        color: '#059669' },
-  { value: 'lost',       label: 'Lost',       color: '#dc2626' },
+  { value: 'new',             label: 'New',             color: '#2563eb' },
+  { value: 'called',          label: 'Called',          color: '#d97706' },
+  { value: 'interested',      label: 'Interested',      color: '#7c3aed' },
+  { value: 'appointment_set', label: 'Appointment Set', color: '#ea580c' },
+  { value: 'converted',       label: 'Converted',       color: '#059669' },
+  { value: 'not_interested',  label: 'Not Interested',  color: '#dc2626' },
 ];
 
 // Lead source options

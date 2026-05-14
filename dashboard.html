@@ -114,7 +114,7 @@
         <div class="stat-card">
           <div class="stat-icon green">✅</div>
           <div class="stat-info">
-            <div class="stat-label">Won</div>
+            <div class="stat-label">Converted</div>
             <div class="stat-value" id="stat-won">—</div>
             <div class="stat-change up">Converted leads</div>
           </div>
@@ -229,11 +229,11 @@
           <select class="filter-select" id="lead-status-filter">
             <option value="">All Statuses</option>
             <option value="new">New</option>
-            <option value="contacted">Contacted</option>
-            <option value="qualified">Qualified</option>
-            <option value="proposal">Proposal</option>
-            <option value="won">Won</option>
-            <option value="lost">Lost</option>
+            <option value="called">Called</option>
+            <option value="interested">Interested</option>
+            <option value="appointment_set">Appointment Set</option>
+            <option value="converted">Converted</option>
+            <option value="not_interested">Not Interested</option>
           </select>
           <select class="filter-select admin-only" id="lead-branch-filter">
             <option value="">All Branches</option>
@@ -262,7 +262,6 @@
                 <th>Source</th>
                 <th>Branch</th>
                 <th>Assigned To</th>
-                <th>Value</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -330,13 +329,6 @@
           <div class="stat-info">
             <div class="stat-label">Conversion Rate</div>
             <div class="stat-value" id="report-conversion">—</div>
-          </div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon amber">💰</div>
-          <div class="stat-info">
-            <div class="stat-label">Won Pipeline Value</div>
-            <div class="stat-value" id="report-pipeline-value">—</div>
           </div>
         </div>
       </div>
@@ -484,10 +476,6 @@
           <input class="form-control" type="text" id="social-media-other" placeholder="e.g. Telegram, X, LinkedIn..." />
         </div>
         <div class="form-group">
-          <label class="form-label">Deal Value ($)</label>
-          <input class="form-control" type="number" name="value" placeholder="e.g. 5000" min="0" />
-        </div>
-        <div class="form-group">
           <label class="form-label">Notes</label>
           <textarea class="form-control notes-area" name="notes" placeholder="Any relevant notes about this lead..."></textarea>
         </div>
@@ -537,10 +525,6 @@
         <div class="detail-item">
           <div class="detail-label">Social Media</div>
           <div class="detail-value" id="detail-social-media">—</div>
-        </div>
-        <div class="detail-item">
-          <div class="detail-label">Deal Value</div>
-          <div class="detail-value" id="detail-value">—</div>
         </div>
         <div class="detail-item">
           <div class="detail-label">Created</div>

@@ -314,11 +314,11 @@ ul { list-style: none; }
 .badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 
 .badge-new { background: #eff6ff; color: #2563eb; }
-.badge-contacted { background: #fffbeb; color: #d97706; }
-.badge-qualified { background: #f5f3ff; color: #7c3aed; }
-.badge-proposal { background: #fff7ed; color: #ea580c; }
-.badge-won { background: #f0fdf4; color: #059669; }
-.badge-lost { background: #fef2f2; color: #dc2626; }
+.badge-called { background: #fffbeb; color: #d97706; }
+.badge-interested { background: #f5f3ff; color: #7c3aed; }
+.badge-appointment_set { background: #fff7ed; color: #ea580c; }
+.badge-converted { background: #f0fdf4; color: #059669; }
+.badge-not_interested { background: #fef2f2; color: #dc2626; }
 .badge-inactive { background: #f8fafc; color: #94a3b8; }
 
 /* ===== FILTERS BAR ===== */
