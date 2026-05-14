@@ -11,7 +11,7 @@ let allLeads = [];
 let allUsers = [];
 let allBranches = [];
 let currentPage = 1;
-const PAGE_SIZE = 15;
+const PAGE_SIZE = 100;
 
 // =============================================
 //  INIT
