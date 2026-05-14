@@ -622,23 +622,33 @@ async function deleteUser(userId) {
 //  REPORTS
 // =============================================
 async function loadReports() {
-  let query = db.from('leads').select('status, branch_id, created_at, value, branches(name)');
+  const base = () => {
+    let q = db.from('leads').select('*', { count: 'exact', head: true });
+    if (currentProfile.role === 'branch_manager') q = q.eq('branch_id', currentProfile.branch_id);
+    if (currentProfile.role === 'client_consultant') q = q.eq('assigned_to', currentUser.id);
+    return q;
+  };
 
-  if (currentProfile.role === 'branch_manager') {
-    query = query.eq('branch_id', currentProfile.branch_id);
-  } else if (currentProfile.role === 'client_consultant') {
-    query = query.eq('assigned_to', currentUser.id);
-  }
+  // Count each status in parallel
+  const statusCounts = {};
+  await Promise.all(LEAD_STATUSES.map(async s => {
+    const { count } = await base().eq('status', s.value);
+    statusCounts[s.value] = count || 0;
+  }));
 
-  const { data: leads } = await query;
-  if (!leads) return;
+  const total = Object.values(statusCounts).reduce((a, b) => a + b, 0);
+  const won = statusCounts['won'] || 0;
+  const convRate = total ? ((won / total) * 100).toFixed(1) : 0;
 
-  const won = leads.filter(l => l.status === 'won');
-  const totalValue = won.reduce((s, l) => s + (l.value || 0), 0);
-  const convRate = leads.length ? ((won.length / leads.length) * 100).toFixed(1) : 0;
+  // Get total won value
+  let valQuery = db.from('leads').select('value').eq('status', 'won').not('value', 'is', null);
+  if (currentProfile.role === 'branch_manager') valQuery = valQuery.eq('branch_id', currentProfile.branch_id);
+  if (currentProfile.role === 'client_consultant') valQuery = valQuery.eq('assigned_to', currentUser.id);
+  const { data: wonLeads } = await valQuery;
+  const totalValue = (wonLeads || []).reduce((s, l) => s + (l.value || 0), 0);
 
-  setText('report-total-leads', leads.length);
-  setText('report-total-won', won.length);
+  setText('report-total-leads', total);
+  setText('report-total-won', won);
   setText('report-conversion', convRate + '%');
   setText('report-pipeline-value', '$' + totalValue.toLocaleString());
 
@@ -646,8 +656,8 @@ async function loadReports() {
   const breakdownEl = document.getElementById('report-status-breakdown');
   if (breakdownEl) {
     breakdownEl.innerHTML = LEAD_STATUSES.map(s => {
-      const count = leads.filter(l => l.status === s.value).length;
-      const pct = leads.length ? (count / leads.length * 100).toFixed(0) : 0;
+      const count = statusCounts[s.value] || 0;
+      const pct = total ? ((count / total) * 100).toFixed(0) : 0;
       return `
         <div style="margin-bottom:14px">
           <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px">
