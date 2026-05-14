@@ -132,37 +132,49 @@ async function loadBranches() {
 //  DASHBOARD
 // =============================================
 async function loadDashboard() {
-  let query = db.from('leads').select('status, created_at, branch_id, assigned_to');
+  // Use separate count queries to avoid the 1000-row default limit
+  const base = () => {
+    let q = db.from('leads').select('*', { count: 'exact', head: true });
+    if (currentProfile.role === 'branch_manager') q = q.eq('branch_id', currentProfile.branch_id);
+    if (currentProfile.role === 'client_consultant') q = q.eq('assigned_to', currentUser.id);
+    return q;
+  };
 
-  if (currentProfile.role === 'branch_manager') {
-    query = query.eq('branch_id', currentProfile.branch_id);
-  } else if (currentProfile.role === 'client_consultant') {
-    query = query.eq('assigned_to', currentUser.id);
-  }
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
-  const { data: leads } = await query;
-  if (!leads) return;
+  const [
+    { count: total },
+    { count: won },
+    { count: active },
+    { count: thisMonth },
+  ] = await Promise.all([
+    base(),
+    base().eq('status', 'won'),
+    base().not('status', 'in', '("won","lost")'),
+    base().gte('created_at', monthStart),
+  ]);
 
-  const total = leads.length;
-  const won = leads.filter(l => l.status === 'won').length;
-  const active = leads.filter(l => !['won','lost'].includes(l.status)).length;
-  const thisMonth = leads.filter(l => {
-    const d = new Date(l.created_at);
-    const now = new Date();
-    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-  }).length;
+  setText('stat-total', total ?? 0);
+  setText('stat-won', won ?? 0);
+  setText('stat-active', active ?? 0);
+  setText('stat-month', thisMonth ?? 0);
 
-  setText('stat-total', total);
-  setText('stat-won', won);
-  setText('stat-active', active);
-  setText('stat-month', thisMonth);
-
-  renderPipeline(leads);
-  await loadRecentLeads(leads.slice(-5).reverse());
+  await loadPipelineCounts();
+  await loadRecentLeads();
 }
 
-function renderPipeline(leads) {
-  const total = leads.length || 1;
+async function loadPipelineCounts() {
+  const counts = {};
+  await Promise.all(LEAD_STATUSES.map(async s => {
+    let q = db.from('leads').select('*', { count: 'exact', head: true }).eq('status', s.value);
+    if (currentProfile.role === 'branch_manager') q = q.eq('branch_id', currentProfile.branch_id);
+    if (currentProfile.role === 'client_consultant') q = q.eq('assigned_to', currentUser.id);
+    const { count } = await q;
+    counts[s.value] = count || 0;
+  }));
+
+  const total = Object.values(counts).reduce((a, b) => a + b, 0) || 1;
   const bar = document.getElementById('pipeline-bar');
   const legendEl = document.getElementById('pipeline-legend');
   if (!bar) return;
@@ -171,7 +183,7 @@ function renderPipeline(leads) {
   legendEl.innerHTML = '';
 
   LEAD_STATUSES.forEach(s => {
-    const count = leads.filter(l => l.status === s.value).length;
+    const count = counts[s.value] || 0;
     const pct = (count / total) * 100;
     if (pct > 0) {
       const seg = document.createElement('div');
@@ -180,13 +192,13 @@ function renderPipeline(leads) {
       seg.title = `${s.label}: ${count}`;
       bar.appendChild(seg);
     }
-
     const leg = document.createElement('div');
     leg.className = 'legend-item';
     leg.innerHTML = `<span class="legend-dot" style="background:${s.color}"></span><span>${s.label} (${count})</span>`;
     legendEl.appendChild(leg);
   });
 }
+
 
 async function loadRecentLeads(localLeads) {
   let leads = localLeads;
