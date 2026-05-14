@@ -301,11 +301,11 @@ function renderLeadsTable(leads) {
       <td>${escHtml(l.branches?.name || '—')}</td>
       <td>${escHtml(l.assigned_profile?.full_name || 'Unassigned')}</td>
       <td>${l.value ? '$' + Number(l.value).toLocaleString() : '—'}</td>
-      <td>
-        <div style="display:flex;gap:6px">
-          <button class="btn btn-outline btn-sm" onclick="openLeadDetail('${l.id}')">View</button>
-          ${canEditLead() ? `<button class="btn btn-outline btn-sm" onclick="openEditLead('${l.id}')">Edit</button>` : ''}
-          ${currentProfile.role === 'admin' ? `<button class="btn btn-sm" style="color:var(--danger);border:1.5px solid var(--border);background:transparent" onclick="deleteLead('${l.id}')">Del</button>` : ''}
+      <td style="white-space:nowrap">
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-outline btn-sm" style="padding:4px 8px;font-size:12px" onclick="openLeadDetail('${l.id}')">View</button>
+          ${canEditLead() ? `<button class="btn btn-outline btn-sm" style="padding:4px 8px;font-size:12px" onclick="openEditLead('${l.id}')">Edit</button>` : ''}
+          ${currentProfile.role === 'admin' ? `<button class="btn btn-sm" style="padding:4px 8px;font-size:12px;color:var(--danger);border:1.5px solid var(--border);background:transparent" onclick="deleteLead('${l.id}')">Del</button>` : ''}
         </div>
       </td>
     </tr>
