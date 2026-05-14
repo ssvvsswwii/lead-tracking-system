@@ -808,7 +808,7 @@ async function confirmImport(rows) {
   // Insert in batches of 500 with progress updates
   let imported = 0;
   let failed = 0;
-  const batchSize = 500;
+  const batchSize = 100;
 
   for (let i = 0; i < leads.length; i += batchSize) {
     const batch = leads.slice(i, i + batchSize);
@@ -826,6 +826,9 @@ async function confirmImport(rows) {
         else failed++;
       }
     }
+
+    // Small pause between batches to avoid rate limiting
+    await new Promise(r => setTimeout(r, 200));
   }
 
   btn.disabled = false; btn.textContent = 'Import Leads';
