@@ -711,9 +711,10 @@ document.getElementById('edit-user-form')?.addEventListener('submit', async (e) 
 });
 
 async function deleteUser(userId) {
-  if (!confirm('Remove this user from the system? They will lose access immediately.')) return;
-  await db.from('profiles').update({ is_active: false }).eq('id', userId);
-  showToast('User deactivated', 'success');
+  if (!confirm('Remove this user from the system? They will be permanently removed from the user list.')) return;
+  const { error } = await db.from('profiles').delete().eq('id', userId);
+  if (error) { showToast('Failed to remove user: ' + error.message, 'error'); return; }
+  showToast('User removed', 'success');
   loadUsers();
 }
 
