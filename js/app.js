@@ -406,6 +406,7 @@ async function openLeadDetail(id) {
     'detail-value': lead.value ? '$' + Number(lead.value).toLocaleString() : '—',
     'detail-created': formatDate(lead.created_at),
     'detail-updated': formatDate(lead.updated_at),
+    'detail-social-media': lead.social_media || '—',
     'detail-notes': lead.notes || 'No notes yet.',
   };
   Object.entries(fields).forEach(([id, val]) => setText(id, val));
@@ -474,6 +475,29 @@ function fillLeadForm(lead) {
   f.notes.value = lead.notes || '';
   if (f.branch_id) f.branch_id.value = lead.branch_id || '';
   if (f.assigned_to) f.assigned_to.value = lead.assigned_to || '';
+
+  // Social media
+  const knownPlatforms = ['WhatsApp','Facebook','Instagram','TikTok'];
+  const sel = document.getElementById('social-media-select');
+  const otherInput = document.getElementById('social-media-other');
+  const otherGroup = document.getElementById('social-media-other-group');
+  if (!lead.social_media) {
+    sel.value = '';
+    otherGroup.style.display = 'none';
+  } else if (knownPlatforms.includes(lead.social_media)) {
+    sel.value = lead.social_media;
+    otherGroup.style.display = 'none';
+  } else {
+    sel.value = 'Others';
+    otherInput.value = lead.social_media;
+    otherGroup.style.display = 'block';
+  }
+}
+
+function toggleSocialMediaOther(sel) {
+  const otherGroup = document.getElementById('social-media-other-group');
+  otherGroup.style.display = sel.value === 'Others' ? 'block' : 'none';
+  if (sel.value !== 'Others') document.getElementById('social-media-other').value = '';
 }
 
 async function populateLeadFormDropdowns() {
@@ -513,6 +537,10 @@ document.getElementById('lead-form')?.addEventListener('submit', async (e) => {
   const f = e.target;
   const id = document.getElementById('lead-form-id').value;
 
+  const socialSelect = document.getElementById('social-media-select').value;
+  const socialOther  = document.getElementById('social-media-other').value.trim();
+  const socialMedia  = socialSelect === 'Others' ? (socialOther || 'Others') : socialSelect;
+
   const payload = {
     first_name: f.first_name.value.trim(),
     last_name: f.last_name.value.trim(),
@@ -520,6 +548,7 @@ document.getElementById('lead-form')?.addEventListener('submit', async (e) => {
     phone: f.phone.value.trim(),
     status: f.status.value,
     source: f.source.value,
+    social_media: socialMedia || null,
     value: f.value.value ? Number(f.value.value) : null,
     notes: f.notes.value.trim(),
     branch_id: f.branch_id?.value || currentProfile.branch_id,
@@ -1146,6 +1175,7 @@ function setLoading(btnId, loading) {
 })();
 
 // Global handlers for inline onclick calls
+window.toggleSocialMediaOther = toggleSocialMediaOther;
 window.toggleSelectAll = toggleSelectAll;
 window.updateBulkBar = updateBulkBar;
 window.clearSelection = clearSelection;

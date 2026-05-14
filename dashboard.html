@@ -469,6 +469,21 @@
           </div>
         </div>
         <div class="form-group">
+          <label class="form-label">Social Media</label>
+          <select class="form-control" name="social_media_select" id="social-media-select" onchange="toggleSocialMediaOther(this)">
+            <option value="">— None —</option>
+            <option value="WhatsApp">WhatsApp</option>
+            <option value="Facebook">Facebook</option>
+            <option value="Instagram">Instagram</option>
+            <option value="TikTok">TikTok</option>
+            <option value="Others">Others</option>
+          </select>
+        </div>
+        <div class="form-group" id="social-media-other-group" style="display:none">
+          <label class="form-label">Specify Social Media</label>
+          <input class="form-control" type="text" id="social-media-other" placeholder="e.g. Telegram, X, LinkedIn..." />
+        </div>
+        <div class="form-group">
           <label class="form-label">Deal Value ($)</label>
           <input class="form-control" type="number" name="value" placeholder="e.g. 5000" min="0" />
         </div>
@@ -518,6 +533,10 @@
         <div class="detail-item">
           <div class="detail-label">Assigned To</div>
           <div class="detail-value" id="detail-assigned">—</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Social Media</div>
+          <div class="detail-value" id="detail-social-media">—</div>
         </div>
         <div class="detail-item">
           <div class="detail-label">Deal Value</div>
