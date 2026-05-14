@@ -2,9 +2,6 @@
 #  SECURITY: Never commit real credentials
 # =============================================
 
-# Your live Supabase config (contains secret keys)
-js/config.js
-
 # OS files
 .DS_Store
 Thumbs.db
