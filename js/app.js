@@ -561,7 +561,10 @@ async function loadUsers() {
       <td><span class="user-role-badge ${ROLES[u.role]?.color || ''}">${ROLES[u.role]?.label || u.role}</span></td>
       <td>${escHtml(u.branches?.name || '—')}</td>
       <td>
-        <label class="toggle"><input type="checkbox" ${u.is_active ? 'checked' : ''} onchange="toggleUserActive('${u.id}', this.checked)"><span class="toggle-slider"></span></label>
+        <label class="toggle">
+          <input type="checkbox" ${u.is_active ? 'checked' : ''} onchange="toggleUserActive('${u.id}', this.checked)">
+          <span class="toggle-slider" style="background:${u.is_active ? '#10b981' : '#ef4444'};" id="toggle-${u.id}"></span>
+        </label>
       </td>
       <td>${formatDate(u.created_at)}</td>
       <td>
@@ -576,8 +579,10 @@ async function loadUsers() {
 
 async function toggleUserActive(userId, active) {
   const { error } = await db.from('profiles').update({ is_active: active }).eq('id', userId);
-  if (error) showToast('Failed to update user status', 'error');
-  else showToast(`User ${active ? 'activated' : 'deactivated'}`, 'success');
+  if (error) { showToast('Failed to update user status', 'error'); return; }
+  const slider = document.getElementById(`toggle-${userId}`);
+  if (slider) slider.style.background = active ? '#10b981' : '#ef4444';
+  showToast(`User ${active ? 'activated' : 'deactivated'}`, 'success');
 }
 
 async function openEditUser(userId) {
