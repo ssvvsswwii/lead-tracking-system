@@ -475,6 +475,29 @@ ul { list-style: none; }
 .import-zone h4 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
 .import-zone p { font-size: 13px; color: var(--text-secondary); }
 
+/* ===== PIPELINE SUMMARY STRIP ===== */
+.pipeline-strip {
+  display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;
+}
+.pipeline-pill {
+  flex: 1; min-width: 110px; background: var(--surface);
+  border: 1.5px solid var(--border); border-radius: var(--radius);
+  padding: 11px 14px 14px; cursor: pointer; transition: all .15s;
+  text-align: center; position: relative; overflow: hidden;
+  user-select: none;
+}
+.pipeline-pill:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.pipeline-pill.active { border-width: 2px; }
+.pipeline-pill-count { font-size: 22px; font-weight: 700; line-height: 1.1; margin-bottom: 3px; }
+.pipeline-pill-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; color: var(--text-secondary); }
+.pipeline-pill-pct { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+.pipeline-pill-bar { position: absolute; bottom: 0; left: 0; height: 3px; border-radius: 0 2px 0 0; transition: width .4s ease; }
+
+@media (max-width: 768px) {
+  .pipeline-pill { min-width: 80px; padding: 8px 10px 12px; }
+  .pipeline-pill-count { font-size: 18px; }
+}
+
 /* ===== TOGGLE SWITCH ===== */
 .toggle-wrap { display: flex; align-items: center; gap: 10px; }
 .toggle { position: relative; width: 40px; height: 22px; }

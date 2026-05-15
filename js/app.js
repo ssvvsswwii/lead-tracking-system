@@ -69,7 +69,7 @@ function navigateTo(page) {
     import: 'Import Leads',
   }[page] || page;
 
-  if (page === 'leads') { loadLeads(); populateBulkConsultantDropdown(); }
+  if (page === 'leads') { loadLeads(); populateBulkConsultantDropdown(); loadPipelineSummary(); }
   if (page === 'users') loadUsers();
   if (page === 'reports') loadReports();
   if (page === 'import') initImport();
@@ -588,7 +588,7 @@ async function deleteLead(id) {
 
 // ---- Lead Filters ----
 document.getElementById('lead-search')?.addEventListener('input', debounce(() => loadLeads(), 350));
-document.getElementById('lead-status-filter')?.addEventListener('change', () => loadLeads());
+document.getElementById('lead-status-filter')?.addEventListener('change', () => { loadLeads(); loadPipelineSummary(); });
 document.getElementById('lead-branch-filter')?.addEventListener('change', () => loadLeads());
 document.getElementById('lead-consultant-filter')?.addEventListener('change', () => loadLeads());
 document.getElementById('lead-sort')?.addEventListener('change', () => loadLeads());
@@ -973,6 +973,70 @@ async function confirmImport(rows) {
 }
 
 // =============================================
+//  PIPELINE SUMMARY STRIP (Leads page)
+// =============================================
+async function loadPipelineSummary() {
+  const strip = document.getElementById('pipeline-strip');
+  if (!strip) return;
+
+  // Show skeleton while loading
+  strip.innerHTML = LEAD_STATUSES.map(() =>
+    `<div class="pipeline-pill" style="background:var(--bg);border-color:var(--border)">
+       <div style="height:22px;background:var(--border);border-radius:4px;margin-bottom:4px"></div>
+       <div style="height:10px;background:var(--border);border-radius:4px;width:60%;margin:0 auto"></div>
+     </div>`
+  ).join('');
+
+  // Fetch counts per status (role-scoped), in parallel
+  const counts = {};
+  await Promise.all(LEAD_STATUSES.map(async s => {
+    let q = db.from('leads').select('*', { count: 'exact', head: true }).eq('status', s.value);
+    if (currentProfile.role === 'branch_manager') q = q.eq('branch_id', currentProfile.branch_id);
+    if (currentProfile.role === 'client_consultant') q = q.eq('assigned_to', currentUser.id);
+    const { count } = await q;
+    counts[s.value] = count || 0;
+  }));
+
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  const currentFilter = document.getElementById('lead-status-filter')?.value || '';
+
+  const allActive = !currentFilter;
+
+  strip.innerHTML = [
+    // "All" pill
+    `<div class="pipeline-pill ${allActive ? 'active' : ''}"
+          style="${allActive ? 'border-color:#2563eb;background:#eff6ff;' : ''}"
+          onclick="setPipelineFilter('')">
+       <div class="pipeline-pill-count" style="color:#2563eb">${total.toLocaleString()}</div>
+       <div class="pipeline-pill-label">All Leads</div>
+       <div class="pipeline-pill-pct">&nbsp;</div>
+       <div class="pipeline-pill-bar" style="width:100%;background:#2563eb;opacity:${allActive?1:.3}"></div>
+     </div>`,
+    ...LEAD_STATUSES.map(s => {
+      const count = counts[s.value] || 0;
+      const pct = total ? Math.round((count / total) * 100) : 0;
+      const isActive = currentFilter === s.value;
+      return `
+        <div class="pipeline-pill ${isActive ? 'active' : ''}"
+             style="${isActive ? `border-color:${s.color};background:${s.color}18;` : ''}"
+             onclick="setPipelineFilter('${s.value}')">
+          <div class="pipeline-pill-count" style="color:${s.color}">${count.toLocaleString()}</div>
+          <div class="pipeline-pill-label">${escHtml(s.label)}</div>
+          <div class="pipeline-pill-pct">${pct}%</div>
+          <div class="pipeline-pill-bar" style="width:${pct}%;background:${s.color};opacity:${isActive?1:.5}"></div>
+        </div>`;
+    })
+  ].join('');
+}
+
+function setPipelineFilter(status) {
+  const filterEl = document.getElementById('lead-status-filter');
+  if (filterEl) filterEl.value = status;
+  loadLeads();
+  loadPipelineSummary();
+}
+
+// =============================================
 //  PAGINATION
 // =============================================
 function renderPaginationControls(total, containerId, loadFn) {
@@ -1189,6 +1253,8 @@ window.deleteUser = deleteUser;
 window.toggleUserActive = toggleUserActive;
 window.changePage = changePage;
 window.goToPage = goToPage;
+window.setPipelineFilter = setPipelineFilter;
+window.loadPipelineSummary = loadPipelineSummary;
 window.openModal = openModal;
 window.closeModal = closeModal;
 window.openAddLead = openAddLead;
