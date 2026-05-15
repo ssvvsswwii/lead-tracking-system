@@ -923,23 +923,35 @@ async function confirmImport(rows) {
   if (!leads.length) { showToast('No valid rows to import', 'error'); return; }
 
   const btn = document.getElementById('confirm-import-btn');
+  const progressBar = document.getElementById('import-progress-bar');
+  const progressWrap = document.getElementById('import-progress-wrap');
   btn.disabled = true;
+  if (progressWrap) progressWrap.style.display = 'block';
 
-  // Insert in batches of 500 with progress updates
   let imported = 0;
   let failed = 0;
-  const batchSize = 100;
+  const batchSize = 50; // Small batches to avoid timeouts
 
   for (let i = 0; i < leads.length; i += batchSize) {
     const batch = leads.slice(i, i + batchSize);
     const progress = Math.round(((i + batch.length) / leads.length) * 100);
-    btn.textContent = `Importing... ${progress}% (${i + batch.length}/${leads.length})`;
+    btn.textContent = `Importing... ${progress}% (${i + batch.length} of ${leads.length})`;
+    if (progressBar) progressBar.style.width = progress + '%';
 
-    const { error } = await db.from('leads').insert(batch);
+    // Timeout wrapper — skip batch if it hangs for 15 seconds
+    const insertWithTimeout = new Promise(async (resolve) => {
+      const timer = setTimeout(() => resolve({ error: { message: 'timeout' } }), 15000);
+      const result = await db.from('leads').insert(batch);
+      clearTimeout(timer);
+      resolve(result);
+    });
+
+    const { error } = await insertWithTimeout;
+
     if (!error) {
       imported += batch.length;
     } else {
-      // Try row-by-row on batch failure to salvage good rows
+      // Retry row by row on failure
       for (const lead of batch) {
         const { error: rowErr } = await db.from('leads').insert(lead);
         if (!rowErr) imported++;
@@ -947,8 +959,8 @@ async function confirmImport(rows) {
       }
     }
 
-    // Small pause between batches to avoid rate limiting
-    await new Promise(r => setTimeout(r, 200));
+    // Pause between batches
+    await new Promise(r => setTimeout(r, 300));
   }
 
   btn.disabled = false; btn.textContent = 'Import Leads';

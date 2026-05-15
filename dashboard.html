@@ -380,6 +380,14 @@
               <button class="btn btn-primary" id="confirm-import-btn">📥 Import Leads</button>
               <button class="btn btn-outline" onclick="document.getElementById('import-preview').style.display='none'">Cancel</button>
             </div>
+            <div id="import-progress-wrap" style="display:none;margin-top:16px">
+              <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);margin-bottom:6px">
+                <span>Importing... please keep this tab open</span>
+              </div>
+              <div class="progress" style="height:10px">
+                <div class="progress-bar" id="import-progress-bar" style="width:0%;background:var(--primary);transition:width .3s"></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
