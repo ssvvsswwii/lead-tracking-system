@@ -1295,12 +1295,12 @@ async function loadPipelineSummary() {
   strip.innerHTML = [
     // "All" pill
     `<div class="pipeline-pill ${allActive ? 'active' : ''}"
-          style="${allActive ? 'border-color:#2563eb;background:#eff6ff;' : ''}"
+          style="${allActive ? 'border-color:#791e1e;background:#fdf2f2;' : ''}"
           onclick="setPipelineFilter('')">
-       <div class="pipeline-pill-count" style="color:#2563eb">${total.toLocaleString()}</div>
+       <div class="pipeline-pill-count" style="color:#791e1e">${total.toLocaleString()}</div>
        <div class="pipeline-pill-label">All Leads</div>
        <div class="pipeline-pill-pct">&nbsp;</div>
-       <div class="pipeline-pill-bar" style="width:100%;background:#2563eb;opacity:${allActive?1:.3}"></div>
+       <div class="pipeline-pill-bar" style="width:100%;background:#791e1e;opacity:${allActive?1:.3}"></div>
      </div>`,
     ...LEAD_STATUSES.map(s => {
       const count = counts[s.value] || 0;
