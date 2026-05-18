@@ -869,13 +869,13 @@ async function loadReports() {
 // =============================================
 //  IMPORT
 // =============================================
-function initImport() {
+async function initImport() {
   const zone = document.getElementById('import-zone');
   if (!zone) return;
 
   // Prevent duplicate listeners by cloning
   const newZone = zone.cloneNode(true);
-  zone.parentNode.replaceChild(newZone, newZone);
+  zone.parentNode.replaceChild(newZone, zone);
 
   newZone.addEventListener('click', () => document.getElementById('import-file-input').click());
   newZone.addEventListener('dragover', e => { e.preventDefault(); newZone.classList.add('dragover'); });
