@@ -883,11 +883,17 @@ function initImport() {
   newZone.addEventListener('drop', e => { e.preventDefault(); newZone.classList.remove('dragover'); handleFile(e.dataTransfer.files[0]); });
   document.getElementById('import-file-input')?.addEventListener('change', e => handleFile(e.target.files[0]));
 
-  // Populate target branch dropdown (admin only)
+  // Populate target branch dropdown with branch manager names (admin only)
   const branchSel = document.getElementById('import-target-branch');
   if (branchSel && currentProfile.role === 'admin') {
-    branchSel.innerHTML = '<option value="">— Select a branch —</option>' +
-      allBranches.map(b => `<option value="${b.id}">${escHtml(b.name)}</option>`).join('');
+    const { data: managers } = await db.from('profiles')
+      .select('full_name, branch_id')
+      .eq('role', 'branch_manager')
+      .eq('is_active', true)
+      .order('full_name');
+    branchSel.innerHTML = '<option value="">— Select a Branch Manager —</option>' +
+      (managers || []).filter(m => m.branch_id)
+        .map(m => `<option value="${m.branch_id}">${escHtml(m.full_name)}</option>`).join('');
   }
 }
 
