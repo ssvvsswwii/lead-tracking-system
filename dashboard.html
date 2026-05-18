@@ -58,6 +58,15 @@
       <div class="nav-item manager-only" data-page="import">
         <span class="nav-icon">📥</span> Import Leads
       </div>
+      <div class="nav-item" data-page="export">
+        <span class="nav-icon">📤</span> Export Leads
+      </div>
+      <div class="nav-item manager-only" data-page="duplicates">
+        <span class="nav-icon">🔍</span> Duplicate Checker
+      </div>
+      <div class="nav-item manager-only" data-page="activity">
+        <span class="nav-icon">📋</span> Activity Log
+      </div>
     </nav>
 
     <div class="sidebar-footer">
@@ -236,6 +245,11 @@
         </select>
         <input type="text" id="bulk-consultant-name" class="form-control" placeholder="Or type consultant name (if not signed up yet)" style="flex:1;min-width:200px;padding:7px 12px" />
         <button class="btn btn-primary btn-sm" onclick="bulkAssign()">✅ Assign Selected</button>
+        <div style="width:1px;background:#bfdbfe;align-self:stretch;margin:0 2px"></div>
+        <select id="bulk-status-select" class="filter-select" style="min-width:160px">
+          <option value="">— Change Status —</option>
+        </select>
+        <button class="btn btn-outline btn-sm" onclick="bulkUpdateStatus()">🔄 Update Status</button>
         <button class="btn btn-outline btn-sm" onclick="clearSelection()">✕ Clear</button>
       </div>
 
@@ -420,6 +434,129 @@
             <li>Sensitive data is encrypted at rest in Supabase — only authorised users can view it</li>
           </ul>
         </div>
+      </div>
+    </section>
+
+    <!-- ========== EXPORT PAGE ========== -->
+    <section class="page" id="page-export">
+      <div class="page-header">
+        <div class="page-header-left">
+          <h2>Export Leads</h2>
+          <p>Download your leads as a spreadsheet file</p>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:18px">
+        <div class="card-header"><h3>Filter Before Export</h3></div>
+        <div class="card-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Status</label>
+              <select class="form-control" id="export-status">
+                <option value="">All Statuses</option>
+              </select>
+            </div>
+            <div class="form-group admin-only">
+              <label class="form-label">Branch</label>
+              <select class="form-control" id="export-branch">
+                <option value="">All Branches</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Date Added From</label>
+              <input class="form-control" type="date" id="export-date-from" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Date Added To</label>
+              <input class="form-control" type="date" id="export-date-to" />
+            </div>
+          </div>
+          <div id="export-preview-info" style="font-size:13px;color:var(--text-secondary);margin:12px 0;padding:10px 14px;background:var(--bg);border-radius:var(--radius-sm)">
+            Click "Count Leads" to preview how many leads match your filters.
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn btn-outline" onclick="countExportLeads()">🔢 Count Leads</button>
+            <button class="btn btn-primary" onclick="doExport('xlsx')">📊 Export as Excel (.xlsx)</button>
+            <button class="btn btn-outline" onclick="doExport('csv')">📄 Export as CSV</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>Export Tips</h3></div>
+        <div class="card-body">
+          <ul style="font-size:13.5px;color:var(--text-secondary);line-height:2;padding-left:20px;list-style:disc">
+            <li>Leave all filters blank to export <strong>all</strong> your leads</li>
+            <li>Branch Managers will only export leads from their branch</li>
+            <li>Client Consultants will only export their assigned leads</li>
+            <li>Excel format is best for sharing with management</li>
+            <li>CSV format works with any spreadsheet app</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== DUPLICATE CHECKER PAGE ========== -->
+    <section class="page" id="page-duplicates">
+      <div class="page-header">
+        <div class="page-header-left">
+          <h2>Duplicate Checker</h2>
+          <p>Find leads sharing the same phone number and clean them up</p>
+        </div>
+        <div class="page-header-right">
+          <button class="btn btn-primary" onclick="scanDuplicates()">🔍 Scan for Duplicates</button>
+        </div>
+      </div>
+      <div id="duplicates-container">
+        <div class="card">
+          <div class="card-body" style="text-align:center;padding:48px;color:var(--text-muted)">
+            <div style="font-size:48px;margin-bottom:16px">🔍</div>
+            <h4 style="font-size:16px;font-weight:600;color:var(--text-primary);margin-bottom:8px">Ready to scan</h4>
+            <p style="font-size:14px">Click <strong>Scan for Duplicates</strong> to check for leads sharing the same phone number.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== ACTIVITY LOG PAGE ========== -->
+    <section class="page" id="page-activity">
+      <div class="page-header">
+        <div class="page-header-left">
+          <h2>Activity Log</h2>
+          <p>Full audit trail of all lead actions</p>
+        </div>
+        <div class="page-header-right">
+          <button class="btn btn-outline" onclick="loadActivityLog()">🔄 Refresh</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="filters-bar">
+          <label style="font-size:13px;color:var(--text-secondary);white-space:nowrap">Date from</label>
+          <input type="date" class="filter-select" id="activity-date-from" />
+          <label style="font-size:13px;color:var(--text-secondary);white-space:nowrap">to</label>
+          <input type="date" class="filter-select" id="activity-date-to" />
+          <button class="btn btn-outline btn-sm" onclick="loadActivityLog()">Filter</button>
+          <button class="btn btn-outline btn-sm" onclick="document.getElementById('activity-date-from').value='';document.getElementById('activity-date-to').value='';loadActivityLog()">Clear</button>
+        </div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Lead</th>
+                <th>Action</th>
+                <th>By</th>
+                <th>Date &amp; Time</th>
+              </tr>
+            </thead>
+            <tbody id="activity-tbody">
+              <tr><td colspan="4" style="text-align:center;padding:32px;color:var(--text-muted)">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="activity-pagination"></div>
       </div>
     </section>
 

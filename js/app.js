@@ -11,7 +11,9 @@ let allLeads = [];
 let allUsers = [];
 let allBranches = [];
 let currentPage = 1;
+let activityPage = 1;
 const PAGE_SIZE = 100;
+const ACTIVITY_PAGE_SIZE = 50;
 
 // =============================================
 //  INIT
@@ -67,12 +69,17 @@ function navigateTo(page) {
     users: 'User Management',
     reports: 'Reports & Analytics',
     import: 'Import Leads',
+    export: 'Export Leads',
+    duplicates: 'Duplicate Checker',
+    activity: 'Activity Log',
   }[page] || page;
 
-  if (page === 'leads') { loadLeads(); populateBulkConsultantDropdown(); loadPipelineSummary(); }
+  if (page === 'leads') { loadLeads(); populateBulkConsultantDropdown(); populateBulkStatusDropdown(); loadPipelineSummary(); }
   if (page === 'users') loadUsers();
   if (page === 'reports') loadReports();
   if (page === 'import') initImport();
+  if (page === 'export') initExport();
+  if (page === 'activity') loadActivityLog();
 
   // Close sidebar on mobile
   document.querySelector('.sidebar').classList.remove('open');
@@ -363,6 +370,29 @@ async function bulkAssign() {
   showToast(`✅ ${selected.length} lead${selected.length > 1 ? 's' : ''} assigned to ${consultantId ? '' : consultantName}`, 'success');
   clearSelection();
   loadLeads();
+}
+
+function populateBulkStatusDropdown() {
+  const sel = document.getElementById('bulk-status-select');
+  if (sel) {
+    sel.innerHTML = '<option value="">— Change Status —</option>' +
+      LEAD_STATUSES.map(s => `<option value="${s.value}">${escHtml(s.label)}</option>`).join('');
+  }
+}
+
+async function bulkUpdateStatus() {
+  const selected = [...document.querySelectorAll('.lead-checkbox:checked')].map(cb => cb.value);
+  if (!selected.length) return;
+  const newStatus = document.getElementById('bulk-status-select').value;
+  if (!newStatus) { showToast('Please select a status to change to', 'error'); return; }
+  const statusName = LEAD_STATUSES.find(s => s.value === newStatus)?.label || newStatus;
+  if (!confirm(`Update ${selected.length} lead${selected.length > 1 ? 's' : ''} to "${statusName}"?`)) return;
+  const { error } = await db.from('leads').update({ status: newStatus, updated_at: new Date().toISOString() }).in('id', selected);
+  if (error) { showToast('Failed to update status: ' + error.message, 'error'); return; }
+  showToast(`✅ ${selected.length} lead${selected.length > 1 ? 's' : ''} updated to ${statusName}`, 'success');
+  clearSelection();
+  loadLeads();
+  loadPipelineSummary();
 }
 
 async function populateBulkConsultantDropdown() {
@@ -973,6 +1003,266 @@ async function confirmImport(rows) {
 }
 
 // =============================================
+//  EXPORT LEADS
+// =============================================
+function initExport() {
+  const statusSel = document.getElementById('export-status');
+  if (statusSel && statusSel.options.length <= 1) {
+    statusSel.innerHTML = '<option value="">All Statuses</option>' +
+      LEAD_STATUSES.map(s => `<option value="${s.value}">${s.label}</option>`).join('');
+  }
+  const branchSel = document.getElementById('export-branch');
+  if (branchSel && currentProfile.role === 'admin') {
+    branchSel.innerHTML = '<option value="">All Branches</option>' +
+      allBranches.map(b => `<option value="${b.id}">${escHtml(b.name)}</option>`).join('');
+  }
+}
+
+function buildExportFilters(query) {
+  const status   = document.getElementById('export-status')?.value || '';
+  const branch   = document.getElementById('export-branch')?.value || '';
+  const dateFrom = document.getElementById('export-date-from')?.value || '';
+  const dateTo   = document.getElementById('export-date-to')?.value || '';
+  if (currentProfile.role === 'branch_manager') query = query.eq('branch_id', currentProfile.branch_id);
+  if (currentProfile.role === 'client_consultant') query = query.eq('assigned_to', currentUser.id);
+  if (status) query = query.eq('status', status);
+  if (branch && currentProfile.role === 'admin') query = query.eq('branch_id', branch);
+  if (dateFrom) query = query.gte('created_at', dateFrom);
+  if (dateTo)   query = query.lte('created_at', dateTo + 'T23:59:59');
+  return query;
+}
+
+async function countExportLeads() {
+  const infoEl = document.getElementById('export-preview-info');
+  if (infoEl) infoEl.textContent = 'Counting...';
+  const { count } = await buildExportFilters(
+    db.from('leads').select('*', { count: 'exact', head: true })
+  );
+  if (infoEl) infoEl.innerHTML = `<strong>${(count || 0).toLocaleString()} leads</strong> match your filters and will be exported.`;
+}
+
+async function doExport(format) {
+  showToast('Preparing export — please wait...', 'info');
+  let allData = [];
+  let from = 0;
+  const batchSize = 1000;
+
+  while (true) {
+    const { data, error } = await buildExportFilters(
+      db.from('leads')
+        .select(`first_name,last_name,email,phone,status,source,social_media,notes,assigned_name,created_at,branches(name),assigned_profile:profiles!leads_assigned_to_fkey(full_name)`)
+        .order('created_at', { ascending: false })
+        .range(from, from + batchSize - 1)
+    );
+    if (error || !data || !data.length) break;
+    allData = allData.concat(data);
+    if (data.length < batchSize) break;
+    from += batchSize;
+  }
+
+  if (!allData.length) { showToast('No leads found to export', 'error'); return; }
+
+  const rows = allData.map(l => ({
+    'First Name':   l.first_name || '',
+    'Last Name':    l.last_name  || '',
+    'Email':        l.email      || '',
+    'Phone':        l.phone      || '',
+    'Status':       statusLabel(l.status),
+    'Source':       l.source     || '',
+    'Branch':       l.branches?.name || '',
+    'Assigned To':  l.assigned_profile?.full_name || l.assigned_name || '',
+    'Social Media': l.social_media || '',
+    'Notes':        l.notes      || '',
+    'Date Added':   formatDate(l.created_at),
+  }));
+
+  format === 'csv' ? exportCSV(rows, 'leads_export') : exportXLSX(rows, 'leads_export');
+  showToast(`✅ Exported ${rows.length.toLocaleString()} leads`, 'success');
+}
+
+function exportCSV(rows, filename) {
+  const headers = Object.keys(rows[0]);
+  const csv = [
+    headers.join(','),
+    ...rows.map(r => headers.map(h => `"${String(r[h] || '').replace(/"/g, '""')}"`).join(','))
+  ].join('\n');
+  const blob = new Blob(['﻿' + csv, { type: 'text/csv;charset=utf-8;' }]);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${filename}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+function exportXLSX(rows, filename) {
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Leads');
+  XLSX.writeFile(wb, `${filename}_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+// =============================================
+//  DUPLICATE CHECKER
+// =============================================
+async function scanDuplicates() {
+  const container = document.getElementById('duplicates-container');
+  if (!container) return;
+
+  container.innerHTML = `<div class="card"><div class="card-body" style="text-align:center;padding:48px">
+    <div class="spinner" style="margin:0 auto 16px"></div>
+    <p style="color:var(--text-muted);font-size:14px">Scanning all leads for duplicate phone numbers...</p>
+  </div></div>`;
+
+  // Fetch all leads in batches
+  let allData = [];
+  let from = 0;
+  const batchSize = 1000;
+
+  while (true) {
+    let q = db.from('leads')
+      .select('id,first_name,last_name,phone,status,created_at,branches(name)')
+      .order('created_at', { ascending: true })
+      .range(from, from + batchSize - 1);
+    if (currentProfile.role === 'branch_manager') q = q.eq('branch_id', currentProfile.branch_id);
+    if (currentProfile.role === 'client_consultant') q = q.eq('assigned_to', currentUser.id);
+    const { data, error } = await q;
+    if (error || !data || !data.length) break;
+    allData = allData.concat(data);
+    if (data.length < batchSize) break;
+    from += batchSize;
+  }
+
+  // Group by normalised phone number
+  const phoneMap = {};
+  allData.forEach(lead => {
+    const phone = (lead.phone || '').replace(/[\s\-]/g, '').trim();
+    if (!phone) return;
+    if (!phoneMap[phone]) phoneMap[phone] = [];
+    phoneMap[phone].push(lead);
+  });
+
+  const duplicates = Object.entries(phoneMap).filter(([, leads]) => leads.length > 1);
+
+  if (!duplicates.length) {
+    container.innerHTML = `<div class="card"><div class="card-body" style="text-align:center;padding:48px">
+      <div style="font-size:48px;margin-bottom:16px">✅</div>
+      <h4 style="font-size:16px;font-weight:600;color:var(--success);margin-bottom:8px">No duplicates found!</h4>
+      <p style="color:var(--text-muted);font-size:14px">All ${allData.length.toLocaleString()} leads have unique phone numbers.</p>
+    </div></div>`;
+    return;
+  }
+
+  const totalExtras = duplicates.reduce((sum, [, leads]) => sum + leads.length - 1, 0);
+
+  container.innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;padding:12px 16px;background:#fef3c7;border:1.5px solid #fde68a;border-radius:var(--radius)">
+      <span style="font-size:22px">⚠️</span>
+      <div>
+        <div style="font-size:14px;font-weight:600;color:#92400e">${duplicates.length} duplicate phone number${duplicates.length > 1 ? 's' : ''} found</div>
+        <div style="font-size:13px;color:#78350f">${totalExtras} extra record${totalExtras > 1 ? 's' : ''} can be removed. The oldest entry is marked <strong>Keep</strong> — remove the rest.</div>
+      </div>
+    </div>
+    ${duplicates.map(([phone, leads]) => `
+      <div class="dup-group">
+        <div class="dup-group-header">
+          <span class="dup-phone">📱 ${escHtml(phone)}</span>
+          <span class="dup-count">${leads.length} entries</span>
+        </div>
+        ${leads.map((l, i) => `
+          <div class="dup-lead-row ${i === 0 ? 'keep' : ''}">
+            <div>
+              <div style="font-weight:600;font-size:13.5px">${escHtml(l.first_name || '')} ${escHtml(l.last_name || '')}</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
+                ${escHtml(l.branches?.name || '—')} &nbsp;·&nbsp; Added ${formatDate(l.created_at)} &nbsp;·&nbsp;
+                <span class="badge badge-${l.status}" style="font-size:10px;padding:2px 7px">${statusLabel(l.status)}</span>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              ${i === 0
+                ? '<span style="font-size:11px;font-weight:600;color:var(--success);background:#dcfce7;padding:3px 12px;border-radius:10px">✓ Keep</span>'
+                : `<button class="btn btn-sm" style="color:var(--danger);border:1.5px solid var(--danger);background:transparent;font-size:12px;padding:4px 10px" onclick="deleteDuplicateLead('${l.id}')">🗑 Remove</button>`}
+              <button class="btn btn-outline btn-sm" style="font-size:12px;padding:4px 10px" onclick="openLeadDetail('${l.id}')">View</button>
+            </div>
+          </div>`).join('')}
+      </div>`).join('')}`;
+}
+
+async function deleteDuplicateLead(id) {
+  if (!confirm('Remove this duplicate lead? This cannot be undone.')) return;
+  const { error } = await db.from('leads').delete().eq('id', id);
+  if (error) { showToast('Failed to remove: ' + error.message, 'error'); return; }
+  showToast('Duplicate removed ✅', 'success');
+  scanDuplicates();
+}
+
+// =============================================
+//  ACTIVITY LOG
+// =============================================
+async function loadActivityLog(resetPage = true) {
+  if (resetPage) activityPage = 1;
+  showTableLoading('activity-tbody', 4);
+
+  const dateFrom = document.getElementById('activity-date-from')?.value || '';
+  const dateTo   = document.getElementById('activity-date-to')?.value || '';
+  const from = (activityPage - 1) * ACTIVITY_PAGE_SIZE;
+  const to   = from + ACTIVITY_PAGE_SIZE - 1;
+
+  let q = db.from('lead_activities')
+    .select(`id, action, created_at,
+      lead:leads(first_name, last_name),
+      actor:profiles!lead_activities_user_id_fkey(full_name)
+    `, { count: 'exact' })
+    .order('created_at', { ascending: false })
+    .range(from, to);
+
+  if (dateFrom) q = q.gte('created_at', dateFrom);
+  if (dateTo)   q = q.lte('created_at', dateTo + 'T23:59:59');
+
+  const { data, count, error } = await q;
+
+  if (error) { showToast('Failed to load activity log', 'error'); return; }
+
+  const tbody = document.getElementById('activity-tbody');
+  if (!tbody) return;
+
+  if (!data || !data.length) {
+    tbody.innerHTML = `<tr><td colspan="4"><div class="empty-state"><div class="empty-icon">📋</div><h4>No activity found</h4><p>Try adjusting the date filters.</p></div></td></tr>`;
+  } else {
+    tbody.innerHTML = data.map(a => `
+      <tr>
+        <td style="font-weight:600">${escHtml(((a.lead?.first_name || '') + ' ' + (a.lead?.last_name || '')).trim() || '—')}</td>
+        <td style="max-width:320px;color:var(--text-secondary)">${escHtml(a.action)}</td>
+        <td style="white-space:nowrap">${escHtml(a.actor?.full_name || 'System')}</td>
+        <td style="white-space:nowrap;color:var(--text-muted);font-size:12px">${formatDate(a.created_at, true)}</td>
+      </tr>`).join('');
+  }
+
+  renderActivityPagination(count || 0);
+}
+
+function renderActivityPagination(total) {
+  const container = document.getElementById('activity-pagination');
+  if (!container) return;
+  const totalPages = Math.ceil(total / ACTIVITY_PAGE_SIZE);
+  const start = (activityPage - 1) * ACTIVITY_PAGE_SIZE + 1;
+  const end   = Math.min(activityPage * ACTIVITY_PAGE_SIZE, total);
+  if (total === 0) { container.innerHTML = ''; return; }
+  container.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-top:1px solid var(--border)">
+      <div class="pagination-info">Showing ${start}–${end} of ${total.toLocaleString()} records</div>
+      <div style="display:flex;gap:4px;align-items:center">
+        <button class="page-btn" onclick="changeActivityPage(-1)" ${activityPage <= 1 ? 'disabled' : ''}>‹</button>
+        <span style="padding:0 10px;font-size:13px;color:var(--text-secondary)">Page ${activityPage} of ${totalPages}</span>
+        <button class="page-btn" onclick="changeActivityPage(1)" ${activityPage >= totalPages ? 'disabled' : ''}>›</button>
+      </div>
+    </div>`;
+}
+
+function changeActivityPage(delta) {
+  activityPage += delta;
+  loadActivityLog(false);
+}
+
+// =============================================
 //  PIPELINE SUMMARY STRIP (Leads page)
 // =============================================
 async function loadPipelineSummary() {
@@ -1255,6 +1545,13 @@ window.changePage = changePage;
 window.goToPage = goToPage;
 window.setPipelineFilter = setPipelineFilter;
 window.loadPipelineSummary = loadPipelineSummary;
+window.bulkUpdateStatus = bulkUpdateStatus;
+window.countExportLeads = countExportLeads;
+window.doExport = doExport;
+window.scanDuplicates = scanDuplicates;
+window.deleteDuplicateLead = deleteDuplicateLead;
+window.loadActivityLog = loadActivityLog;
+window.changeActivityPage = changeActivityPage;
 window.openModal = openModal;
 window.closeModal = closeModal;
 window.openAddLead = openAddLead;
