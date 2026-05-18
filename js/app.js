@@ -139,7 +139,17 @@ async function loadBranches() {
 //  DASHBOARD
 // =============================================
 async function loadDashboard() {
-  // Use separate count queries to avoid the 1000-row default limit
+  // Personalised greeting based on role & branch
+  const hour = new Date().getHours();
+  const greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const firstName = currentProfile.full_name?.split(' ')[0] || '';
+  const branchName = currentProfile.branches?.name || '';
+  let context = "here's your lead summary";
+  if (currentProfile.role === 'admin')                                   context = "here's your full system overview";
+  else if (currentProfile.role === 'branch_manager' && branchName)       context = `${branchName} branch`;
+  else if (currentProfile.role === 'client_consultant')                  context = "here's your assigned leads";
+  setText('dashboard-greeting', `${greet}, ${firstName} — ${context}`);
+
   const base = () => {
     let q = db.from('leads').select('*', { count: 'exact', head: true });
     if (currentProfile.role === 'branch_manager') q = q.eq('branch_id', currentProfile.branch_id);
@@ -148,27 +158,49 @@ async function loadDashboard() {
   };
 
   const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const monthStart    = new Date(now.getFullYear(), now.getMonth(),     1).toISOString();
+  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
+  const lastMonthEnd   = new Date(now.getFullYear(), now.getMonth(),     0, 23, 59, 59).toISOString();
 
   const [
     { count: total },
-    { count: won },
+    { count: converted },
     { count: active },
     { count: thisMonth },
+    { count: lastMonth },
   ] = await Promise.all([
     base(),
-    base().eq('status', 'won'),
-    base().not('status', 'in', '("won","lost")'),
+    base().eq('status', 'converted'),
+    base().not('status', 'in', '("converted","not_interested")'),
     base().gte('created_at', monthStart),
+    base().gte('created_at', lastMonthStart).lte('created_at', lastMonthEnd),
   ]);
 
-  setText('stat-total', total ?? 0);
-  setText('stat-won', won ?? 0);
-  setText('stat-active', active ?? 0);
-  setText('stat-month', thisMonth ?? 0);
+  setText('stat-total',  (total     ?? 0).toLocaleString());
+  setText('stat-won',    (converted ?? 0).toLocaleString());
+  setText('stat-active', (active    ?? 0).toLocaleString());
+  setText('stat-month',  (thisMonth ?? 0).toLocaleString());
+
+  // Dynamic stat-change subtexts
+  const convRate = total ? ((converted / total) * 100).toFixed(1) : '0.0';
+  setStatChange('stat-change-total',  `+${(thisMonth ?? 0).toLocaleString()} added this month`, 'up');
+  setStatChange('stat-change-won',    `${convRate}% overall conversion rate`, convRate > 0 ? 'up' : '');
+  setStatChange('stat-change-active', 'Excl. converted & not interested', '');
+
+  const diff = (thisMonth ?? 0) - (lastMonth ?? 0);
+  if      (diff > 0) setStatChange('stat-change-month', `↑ ${diff} more than last month`,           'up');
+  else if (diff < 0) setStatChange('stat-change-month', `↓ ${Math.abs(diff)} fewer than last month`, 'down');
+  else               setStatChange('stat-change-month', 'Same as last month', '');
 
   await loadPipelineCounts();
   await loadRecentLeads();
+}
+
+function setStatChange(id, text, direction) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text;
+  el.className = `stat-change ${direction}`.trim();
 }
 
 async function loadPipelineCounts() {
@@ -285,6 +317,21 @@ async function loadLeads(resetPage = true) {
   allLeads = data || [];
   renderLeadsTable(allLeads);
   renderPaginationControls(count || 0, 'leads-pagination', loadLeads);
+  updateFilterIndicator();
+}
+
+function updateFilterIndicator() {
+  const search     = document.getElementById('lead-search')?.value?.trim() || '';
+  const status     = document.getElementById('lead-status-filter')?.value || '';
+  const branch     = document.getElementById('lead-branch-filter')?.value || '';
+  const consultant = document.getElementById('lead-consultant-filter')?.value || '';
+  const activeCount = [search, status, branch, consultant].filter(Boolean).length;
+  const badge = document.getElementById('filter-active-badge');
+  if (!badge) return;
+  badge.style.display = activeCount > 0 ? 'inline-flex' : 'none';
+  badge.textContent = activeCount > 0
+    ? `● ${activeCount} filter${activeCount > 1 ? 's' : ''} active`
+    : '';
 }
 
 function renderLeadsTable(leads) {

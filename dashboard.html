@@ -117,7 +117,7 @@
           <div class="stat-info">
             <div class="stat-label">Total Leads</div>
             <div class="stat-value" id="stat-total">—</div>
-            <div class="stat-change up">All time</div>
+            <div class="stat-change" id="stat-change-total">All time</div>
           </div>
         </div>
         <div class="stat-card">
@@ -125,7 +125,7 @@
           <div class="stat-info">
             <div class="stat-label">Converted</div>
             <div class="stat-value" id="stat-won">—</div>
-            <div class="stat-change up">Converted leads</div>
+            <div class="stat-change" id="stat-change-won">Converted leads</div>
           </div>
         </div>
         <div class="stat-card">
@@ -133,7 +133,7 @@
           <div class="stat-info">
             <div class="stat-label">Active Pipeline</div>
             <div class="stat-value" id="stat-active">—</div>
-            <div class="stat-change up">In progress</div>
+            <div class="stat-change" id="stat-change-active">In progress</div>
           </div>
         </div>
         <div class="stat-card">
@@ -141,7 +141,7 @@
           <div class="stat-info">
             <div class="stat-label">This Month</div>
             <div class="stat-value" id="stat-month">—</div>
-            <div class="stat-change up">New leads</div>
+            <div class="stat-change" id="stat-change-month">New leads</div>
           </div>
         </div>
       </div>
@@ -278,6 +278,7 @@
             <option value="created_at_asc">Oldest First</option>
           </select>
           <button class="btn btn-outline btn-sm" onclick="document.getElementById('lead-search').value='';document.getElementById('lead-status-filter').value='';document.getElementById('lead-sort').value='created_at_desc';loadLeads()">Clear</button>
+          <span id="filter-active-badge" style="display:none;font-size:12px;font-weight:600;color:var(--primary);background:var(--primary-light);padding:4px 12px;border-radius:10px;white-space:nowrap">● Filters active</span>
         </div>
 
         <!-- Table -->
