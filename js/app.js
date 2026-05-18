@@ -194,6 +194,7 @@ async function loadDashboard() {
 
   await loadPipelineCounts();
   await loadRecentLeads();
+  loadLeaderboard();
 }
 
 function setStatChange(id, text, direction) {
@@ -359,7 +360,7 @@ function renderLeadsTable(leads) {
       : '';
 
     return `
-    <tr>
+    <tr class="row-${l.status}">
       <td><input type="checkbox" class="lead-checkbox" value="${l.id}" onchange="updateBulkBar()" /></td>
       <td>
         <div style="font-weight:600">${escHtml(l.first_name)} ${escHtml(l.last_name)}</div>
@@ -526,6 +527,10 @@ async function openLeadDetail(id) {
           </div>`).join('')
       : '<p style="color:var(--text-muted);font-size:13px">No activity yet.</p>';
   }
+
+  // Print button
+  const printBtn = document.getElementById('print-lead-btn');
+  if (printBtn) printBtn.onclick = () => printLeadProfile(lead);
 
   // Note logging
   document.getElementById('log-note-btn').onclick = async () => {
@@ -1073,6 +1078,103 @@ async function confirmImport(rows) {
   showToast(msg, failed > 0 ? 'warning' : 'success');
   document.getElementById('import-preview').style.display = 'none';
   navigateTo('leads');
+}
+
+// =============================================
+//  PRINT LEAD PROFILE
+// =============================================
+function printLeadProfile(lead) {
+  const assignedName = lead.assigned_profile?.full_name || lead.assigned_name || 'Unassigned';
+  const branchName   = lead.branches?.name || '—';
+  const statusText   = statusLabel(lead.status);
+  const dateAdded    = formatDate(lead.created_at);
+  const printDate    = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+  const notes        = (lead.notes || 'No notes recorded.').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>${lead.first_name} ${lead.last_name} — Lead Profile</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,sans-serif;padding:40px;color:#1e293b;max-width:680px;margin:0 auto}
+  .hdr{border-bottom:3px solid #791e1e;padding-bottom:14px;margin-bottom:24px}
+  .hdr h1{font-size:26px;color:#791e1e}
+  .hdr .sub{font-size:13px;color:#64748b;margin-top:4px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px}
+  .field label{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;font-weight:700;display:block;margin-bottom:4px}
+  .field .val{font-size:14px;font-weight:500}
+  .notes{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px}
+  .notes label{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;font-weight:700;display:block;margin-bottom:8px}
+  .notes p{font-size:14px;line-height:1.7;white-space:pre-wrap}
+  .footer{margin-top:28px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:11px;color:#94a3b8;display:flex;justify-content:space-between}
+  @media print{@page{margin:15mm}}
+</style></head><body>
+  <div class="hdr"><h1>${lead.first_name} ${lead.last_name}</h1>
+    <div class="sub">LeadFlow CRM &nbsp;·&nbsp; Printed ${printDate}</div></div>
+  <div class="grid">
+    <div class="field"><label>Email</label><div class="val">${lead.email || '—'}</div></div>
+    <div class="field"><label>Phone</label><div class="val">${lead.phone || '—'}</div></div>
+    <div class="field"><label>Status</label><div class="val">${statusText}</div></div>
+    <div class="field"><label>Source</label><div class="val">${lead.source || '—'}</div></div>
+    <div class="field"><label>Branch</label><div class="val">${branchName}</div></div>
+    <div class="field"><label>Assigned To</label><div class="val">${assignedName}</div></div>
+    <div class="field"><label>Social Media</label><div class="val">${lead.social_media || '—'}</div></div>
+    <div class="field"><label>Date Added</label><div class="val">${dateAdded}</div></div>
+  </div>
+  <div class="notes"><label>Notes &amp; Remarks</label><p>${notes}</p></div>
+  <div class="footer"><span>LeadFlow CRM — Confidential</span><span>${printDate}</span></div>
+  <script>window.onload=function(){window.print()};<\/script>
+</body></html>`);
+  win.document.close();
+}
+
+// =============================================
+//  CONSULTANT LEADERBOARD
+// =============================================
+async function loadLeaderboard() {
+  const el = document.getElementById('leaderboard-body');
+  if (!el) return;
+
+  // Fetch active consultants (scoped by branch for managers)
+  let q = db.from('profiles').select('id,full_name').eq('role','client_consultant').eq('is_active',true);
+  if (currentProfile.role === 'branch_manager') q = q.eq('branch_id', currentProfile.branch_id);
+  const { data: consultants } = await q;
+
+  if (!consultants?.length) {
+    el.innerHTML = '<p style="text-align:center;color:var(--text-muted);font-size:13px;padding:16px">No active consultants yet.</p>';
+    return;
+  }
+
+  // Count converted leads per consultant in parallel
+  const results = await Promise.all(consultants.map(async c => {
+    let cq = db.from('leads').select('*', { count: 'exact', head: true })
+      .eq('assigned_to', c.id).eq('status', 'converted');
+    if (currentProfile.role === 'branch_manager') cq = cq.eq('branch_id', currentProfile.branch_id);
+    const { count } = await cq;
+    return { ...c, converted: count || 0 };
+  }));
+
+  results.sort((a, b) => b.converted - a.converted);
+  const top = results.slice(0, 5);
+  const maxConverted = Math.max(...top.map(r => r.converted), 1);
+  const medals = ['🥇','🥈','🥉','4.','5.'];
+
+  if (top.every(t => t.converted === 0)) {
+    el.innerHTML = '<p style="text-align:center;color:var(--text-muted);font-size:13px;padding:16px">No conversions recorded yet.</p>';
+    return;
+  }
+
+  el.innerHTML = top.map((c, i) => `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:${i < top.length-1 ? '14px' : '0'}">
+      <span style="font-size:18px;width:28px;text-align:center;flex-shrink:0">${medals[i]}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(c.full_name)}</div>
+        <div style="background:var(--border);border-radius:4px;height:5px;margin-top:5px;overflow:hidden">
+          <div style="background:var(--primary);height:100%;width:${Math.round((c.converted/maxConverted)*100)}%;border-radius:4px;transition:width .4s"></div>
+        </div>
+      </div>
+      <div style="font-size:13px;font-weight:700;color:var(--primary);white-space:nowrap;flex-shrink:0">${c.converted} <span style="font-weight:400;color:var(--text-muted);font-size:11px">converted</span></div>
+    </div>`).join('');
 }
 
 // =============================================

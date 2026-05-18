@@ -498,6 +498,20 @@ ul { list-style: none; }
   .pipeline-pill-count { font-size: 18px; }
 }
 
+/* ===== COLOUR-CODED TABLE ROWS ===== */
+.table tbody tr.row-new              { background: #f5f8ff; }
+.table tbody tr.row-called           { background: #fefdf5; }
+.table tbody tr.row-interested       { background: #faf8ff; }
+.table tbody tr.row-appointment_set  { background: #fff8f4; }
+.table tbody tr.row-converted        { background: #f4fdf8; }
+.table tbody tr.row-not_interested   { background: #fff5f5; }
+.table tbody tr.row-new:hover              { background: #e8eeff !important; }
+.table tbody tr.row-called:hover           { background: #fef9e0 !important; }
+.table tbody tr.row-interested:hover       { background: #f0ebff !important; }
+.table tbody tr.row-appointment_set:hover  { background: #ffeee4 !important; }
+.table tbody tr.row-converted:hover        { background: #e4faf0 !important; }
+.table tbody tr.row-not_interested:hover   { background: #ffe8e8 !important; }
+
 /* ===== QUICK STATUS MENU ===== */
 .quick-status-opt:hover { background: var(--bg); }
 

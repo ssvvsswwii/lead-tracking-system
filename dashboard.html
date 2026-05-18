@@ -49,10 +49,6 @@
         <span class="nav-icon">🔑</span> User Management
       </div>
 
-      <div class="nav-item admin-only" data-page="import">
-        <span class="nav-icon">📥</span> Import Leads
-      </div>
-
       <div class="nav-section-label">Tools</div>
 
       <div class="nav-item manager-only" data-page="import">
@@ -180,6 +176,17 @@
               👤 Manage Users
             </button>
           </div>
+        </div>
+      </div>
+
+      <!-- Consultant Leaderboard (managers + admin only) -->
+      <div class="card manager-only" style="margin-bottom:18px">
+        <div class="card-header">
+          <h3>🏆 Consultant Leaderboard</h3>
+          <span style="font-size:12px;color:var(--text-muted)">Top performers · Conversions</span>
+        </div>
+        <div class="card-body" id="leaderboard-body">
+          <div style="text-align:center;color:var(--text-muted);padding:16px;font-size:13px">Loading...</div>
         </div>
       </div>
 
@@ -717,6 +724,7 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline modal-cancel">Close</button>
+      <button class="btn btn-outline" id="print-lead-btn">🖨️ Print Profile</button>
     </div>
   </div>
 </div>
