@@ -872,11 +872,23 @@ async function loadReports() {
 function initImport() {
   const zone = document.getElementById('import-zone');
   if (!zone) return;
-  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
-  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
-  zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('dragover'); handleFile(e.dataTransfer.files[0]); });
 
+  // Prevent duplicate listeners by cloning
+  const newZone = zone.cloneNode(true);
+  zone.parentNode.replaceChild(newZone, newZone);
+
+  newZone.addEventListener('click', () => document.getElementById('import-file-input').click());
+  newZone.addEventListener('dragover', e => { e.preventDefault(); newZone.classList.add('dragover'); });
+  newZone.addEventListener('dragleave', () => newZone.classList.remove('dragover'));
+  newZone.addEventListener('drop', e => { e.preventDefault(); newZone.classList.remove('dragover'); handleFile(e.dataTransfer.files[0]); });
   document.getElementById('import-file-input')?.addEventListener('change', e => handleFile(e.target.files[0]));
+
+  // Populate target branch dropdown (admin only)
+  const branchSel = document.getElementById('import-target-branch');
+  if (branchSel && currentProfile.role === 'admin') {
+    branchSel.innerHTML = '<option value="">— Select a branch —</option>' +
+      allBranches.map(b => `<option value="${b.id}">${escHtml(b.name)}</option>`).join('');
+  }
 }
 
 async function handleFile(file) {
@@ -989,7 +1001,8 @@ async function confirmImport(rows) {
     const hasAnyValue = Object.values(row).some(v => String(v || '').trim() !== '');
     if (!hasAnyValue) return null;
 
-    const lead = { branch_id: currentProfile.branch_id, created_by: currentUser.id };
+    const targetBranch = document.getElementById('import-target-branch')?.value || currentProfile.branch_id;
+    const lead = { branch_id: targetBranch, created_by: currentUser.id };
     Object.entries(colMaps).forEach(([src, dst]) => {
       const val = String(row[src] || '').trim();
       if (!val) return;
@@ -1029,6 +1042,13 @@ async function confirmImport(rows) {
   }).filter(Boolean);
 
   if (!leads.length) { showToast('No valid rows to import', 'error'); return; }
+
+  // Remind admin to pick a branch
+  const targetBranchCheck = document.getElementById('import-target-branch');
+  if (currentProfile.role === 'admin' && targetBranchCheck && !targetBranchCheck.value) {
+    showToast('⚠️ Please select a target branch before importing', 'error');
+    return;
+  }
 
   const btn = document.getElementById('confirm-import-btn');
   const progressBar = document.getElementById('import-progress-bar');
