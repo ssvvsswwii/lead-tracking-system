@@ -498,6 +498,9 @@ ul { list-style: none; }
   .pipeline-pill-count { font-size: 18px; }
 }
 
+/* ===== QUICK STATUS MENU ===== */
+.quick-status-opt:hover { background: var(--bg); }
+
 /* ===== DUPLICATE CHECKER ===== */
 .dup-group { border: 1.5px solid var(--border); border-radius: var(--radius); margin-bottom: 12px; overflow: hidden; }
 .dup-group-header {

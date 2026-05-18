@@ -296,15 +296,41 @@ function renderLeadsTable(leads) {
     return;
   }
 
-  tbody.innerHTML = leads.map(l => `
+  tbody.innerHTML = leads.map(l => {
+    // WhatsApp link — strip everything except digits
+    const waPhone = (l.phone || '').replace(/[^\d]/g, '');
+    const waLink = waPhone
+      ? `<a href="https://wa.me/${waPhone}" target="_blank" rel="noopener"
+            style="font-size:11px;color:#25d366;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:3px;margin-top:2px"
+            title="Open WhatsApp chat" onclick="event.stopPropagation()">💬 WhatsApp</a>`
+      : '';
+
+    // Notes preview — truncated, full text on hover
+    const notesPreview = l.notes
+      ? `<div style="font-size:11px;color:var(--text-muted);margin-top:3px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+              title="${escHtml(l.notes)}">📝 ${escHtml(l.notes.substring(0, 55))}${l.notes.length > 55 ? '…' : ''}</div>`
+      : '';
+
+    return `
     <tr>
       <td><input type="checkbox" class="lead-checkbox" value="${l.id}" onchange="updateBulkBar()" /></td>
       <td>
         <div style="font-weight:600">${escHtml(l.first_name)} ${escHtml(l.last_name)}</div>
-        <div style="font-size:12px;color:var(--text-muted)">${escHtml(l.email)}</div>
+        <div style="font-size:12px;color:var(--text-muted)">${escHtml(l.email || '')}</div>
+        ${notesPreview}
       </td>
-      <td>${escHtml(l.phone || '—')}</td>
-      <td><span class="badge badge-${l.status}">${statusLabel(l.status)}</span></td>
+      <td>
+        <div>${escHtml(l.phone || '—')}</div>
+        ${waLink}
+      </td>
+      <td>
+        <span class="badge badge-${l.status}"
+              style="cursor:pointer;user-select:none"
+              title="Click to change status"
+              onclick="quickStatusMenu(event,'${l.id}','${l.status}')">
+          ${statusLabel(l.status)}
+        </span>
+      </td>
       <td>${escHtml(l.source || '—')}</td>
       <td>${escHtml(l.branches?.name || '—')}</td>
       <td>${escHtml(l.assigned_profile?.full_name || l.assigned_name || 'Unassigned')}</td>
@@ -315,8 +341,8 @@ function renderLeadsTable(leads) {
           ${currentProfile.role === 'admin' ? `<button class="btn btn-sm" style="padding:4px 8px;font-size:12px;color:var(--danger);border:1.5px solid var(--border);background:transparent" onclick="deleteLead('${l.id}')">Del</button>` : ''}
         </div>
       </td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
 }
 
 function toggleSelectAll(checkbox) {
@@ -1003,6 +1029,72 @@ async function confirmImport(rows) {
 }
 
 // =============================================
+//  QUICK STATUS CHANGE
+// =============================================
+function quickStatusMenu(event, leadId, currentStatus) {
+  event.stopPropagation();
+  document.getElementById('quick-status-menu')?.remove();
+
+  const menu = document.createElement('div');
+  menu.id = 'quick-status-menu';
+  menu.style.cssText = `
+    position:fixed; z-index:500;
+    background:var(--surface); border:1.5px solid var(--border);
+    border-radius:var(--radius); box-shadow:var(--shadow-lg);
+    padding:6px; min-width:175px;
+  `;
+
+  // Position — flip upward if near bottom of screen
+  const rect = event.target.getBoundingClientRect();
+  const below = window.innerHeight - rect.bottom;
+  if (below < 220) {
+    menu.style.bottom = (window.innerHeight - rect.top + 4) + 'px';
+  } else {
+    menu.style.top = (rect.bottom + 4) + 'px';
+  }
+  menu.style.left = Math.min(rect.left, window.innerWidth - 185) + 'px';
+
+  menu.innerHTML = `
+    <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;padding:4px 8px 6px">Change Status</div>
+    ${LEAD_STATUSES.map(s => `
+      <div class="quick-status-opt"
+           onclick="quickUpdateStatus('${leadId}','${s.value}')"
+           style="padding:7px 10px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:8px;${s.value === currentStatus ? 'background:var(--bg)' : ''}">
+        <span class="badge badge-${s.value}" style="font-size:11px;pointer-events:none">${s.label}</span>
+        ${s.value === currentStatus ? '<span style="margin-left:auto;color:var(--success)">✓</span>' : ''}
+      </div>`).join('')}`;
+
+  document.body.appendChild(menu);
+
+  // Close on next click anywhere
+  setTimeout(() => {
+    document.addEventListener('click', () => document.getElementById('quick-status-menu')?.remove(), { once: true });
+  }, 0);
+}
+
+async function quickUpdateStatus(leadId, newStatus) {
+  document.getElementById('quick-status-menu')?.remove();
+  const label = statusLabel(newStatus);
+
+  const { error } = await db.from('leads')
+    .update({ status: newStatus, updated_at: new Date().toISOString() })
+    .eq('id', leadId);
+
+  if (error) { showToast('Failed to update status', 'error'); return; }
+
+  // Log to activity trail
+  await db.from('lead_activities').insert({
+    lead_id: leadId,
+    user_id: currentUser.id,
+    action: `Status changed to ${label}`,
+  });
+
+  showToast(`✅ Status updated to ${label}`, 'success');
+  loadLeads(false);       // keep current page
+  loadPipelineSummary();  // refresh counts strip
+}
+
+// =============================================
 //  EXPORT LEADS
 // =============================================
 function initExport() {
@@ -1545,6 +1637,8 @@ window.changePage = changePage;
 window.goToPage = goToPage;
 window.setPipelineFilter = setPipelineFilter;
 window.loadPipelineSummary = loadPipelineSummary;
+window.quickStatusMenu = quickStatusMenu;
+window.quickUpdateStatus = quickUpdateStatus;
 window.bulkUpdateStatus = bulkUpdateStatus;
 window.countExportLeads = countExportLeads;
 window.doExport = doExport;
