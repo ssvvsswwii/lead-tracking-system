@@ -702,16 +702,15 @@ document.getElementById('lead-consultant-filter')?.addEventListener('change', ()
 document.getElementById('lead-sort')?.addEventListener('change', () => loadLeads());
 
 async function initLeadFilters() {
-  // Populate branch filter (admin only)
+  // Branch filter — already hidden by admin-only CSS class for non-admins,
+  // just populate it for admins
   const branchFilter = document.getElementById('lead-branch-filter');
   if (branchFilter && currentProfile.role === 'admin') {
     branchFilter.innerHTML = '<option value="">All Branches</option>' +
       allBranches.map(b => `<option value="${b.id}">${escHtml(b.name)}</option>`).join('');
-  } else if (branchFilter) {
-    branchFilter.parentElement?.remove();
   }
 
-  // Populate consultant filter
+  // Consultant filter — populate for admin & branch manager, hide for consultants
   const consultantFilter = document.getElementById('lead-consultant-filter');
   if (consultantFilter && currentProfile.role !== 'client_consultant') {
     let q = db.from('profiles').select('id,full_name').eq('role','client_consultant').eq('is_active',true);
@@ -720,7 +719,7 @@ async function initLeadFilters() {
     consultantFilter.innerHTML = '<option value="">All Consultants</option>' +
       (data || []).map(c => `<option value="${c.id}">${escHtml(c.full_name)}</option>`).join('');
   } else if (consultantFilter) {
-    consultantFilter.parentElement?.remove();
+    consultantFilter.remove(); // remove only this select, not the whole filters bar
   }
 }
 
